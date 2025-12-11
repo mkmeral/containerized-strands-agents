@@ -152,6 +152,34 @@ class AgentManager:
         (agent_dir / "workspace").mkdir(exist_ok=True)
         return agent_dir
 
+    def _save_system_prompt(self, agent_id: str, system_prompt: str):
+        """Save custom system prompt for an agent."""
+        agent_dir = self._get_agent_dir(agent_id)
+        prompt_file = agent_dir / "system_prompt.txt"
+        prompt_file.write_text(system_prompt)
+        logger.info(f"Saved custom system prompt for agent {agent_id}")
+
+    def _load_system_prompt(self, agent_id: str) -> Optional[str]:
+        """Load custom system prompt for an agent."""
+        agent_dir = self._get_agent_dir(agent_id)
+        prompt_file = agent_dir / "system_prompt.txt"
+        if prompt_file.exists():
+            return prompt_file.read_text()
+        return None
+
+    def _has_existing_session(self, agent_id: str) -> bool:
+        """Check if agent has an existing session (messages)."""
+        agent_dir = self._get_agent_dir(agent_id)
+        session_file = agent_dir / "session.json"
+        if session_file.exists():
+            try:
+                data = json.loads(session_file.read_text())
+                messages = data.get("messages", [])
+                return len(messages) > 0
+            except Exception:
+                return False
+        return False
+
     async def _wait_for_container_ready(self, port: int, timeout: int = CONTAINER_STARTUP_TIMEOUT_SECONDS):
         """Wait for container HTTP API to be ready."""
         url = f"http://localhost:{port}/health"
@@ -180,9 +208,19 @@ class AgentManager:
         agent_id: str,
         aws_profile: str | None = None,
         aws_region: str | None = None,
+        system_prompt: str | None = None,
     ) -> AgentInfo:
         """Get existing agent or create new one."""
         agent = self.tracker.get_agent(agent_id)
+        
+        # Handle system prompt for new or existing agents
+        if system_prompt:
+            if agent and self._has_existing_session(agent_id):
+                # Agent exists with session - don't change system prompt
+                logger.warning(f"Ignoring system_prompt for agent {agent_id} - agent already has messages")
+            else:
+                # New agent or agent without messages - save the system prompt
+                self._save_system_prompt(agent_id, system_prompt)
         
         if agent and agent.container_id:
             # Check if container is still running
@@ -255,6 +293,11 @@ class AgentManager:
             # Default to us-east-1 if not specified
             env["AWS_DEFAULT_REGION"] = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
         
+        # Check if there's a custom system prompt
+        custom_system_prompt = self._load_system_prompt(agent.agent_id)
+        if custom_system_prompt:
+            env["CUSTOM_SYSTEM_PROMPT"] = "true"
+        
         # Build volumes - include AWS credentials directory if it exists
         volumes = {
             str(agent_dir.absolute()): {"bind": "/data", "mode": "rw"},
@@ -301,12 +344,18 @@ class AgentManager:
         message: str,
         aws_profile: str | None = None,
         aws_region: str | None = None,
+        system_prompt: str | None = None,
     ) -> dict:
         """Send a message to an agent (fire-and-forget).
         
         Returns immediately after dispatching. Use get_messages to check response.
         """
-        agent = await self.get_or_create_agent(agent_id, aws_profile=aws_profile, aws_region=aws_region)
+        agent = await self.get_or_create_agent(
+            agent_id, 
+            aws_profile=aws_profile, 
+            aws_region=aws_region,
+            system_prompt=system_prompt
+        )
         
         if agent.status != "running":
             return {"status": "error", "error": f"Agent not running: {agent.status}"}

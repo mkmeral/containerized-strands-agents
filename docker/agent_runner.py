@@ -38,9 +38,21 @@ IDLE_TIMEOUT_MINUTES = int(os.getenv("IDLE_TIMEOUT_MINUTES", "30"))
 DATA_DIR = Path("/data")
 SESSION_FILE = DATA_DIR / "session.json"
 WORKSPACE_DIR = DATA_DIR / "workspace"
+CUSTOM_SYSTEM_PROMPT_FILE = DATA_DIR / "system_prompt.txt"
 
-# System prompt for the agent
-SYSTEM_PROMPT = """You are a helpful AI assistant running in an isolated environment.
+# System prompt for the agent - load custom if available
+def load_system_prompt() -> str:
+    """Load system prompt, preferring custom if available."""
+    if os.getenv("CUSTOM_SYSTEM_PROMPT") == "true" and CUSTOM_SYSTEM_PROMPT_FILE.exists():
+        try:
+            custom_prompt = CUSTOM_SYSTEM_PROMPT_FILE.read_text()
+            logger.info("Using custom system prompt")
+            return custom_prompt
+        except Exception as e:
+            logger.error(f"Failed to load custom system prompt: {e}")
+            logger.info("Falling back to default system prompt")
+    
+    return """You are a helpful AI assistant running in an isolated environment.
 
 You have access to the following tools:
 - file_read: Read files from your workspace
@@ -56,6 +68,8 @@ Your workspace is at /data/workspace. All file operations should be relative to 
 Be helpful, concise, and thorough in completing tasks. If a task requires multiple steps,
 break it down and execute each step carefully.
 """
+
+SYSTEM_PROMPT = load_system_prompt()
 
 # Bypass tool consent for automated operation
 os.environ["BYPASS_TOOL_CONSENT"] = "true"
