@@ -354,6 +354,14 @@ class AgentManager:
         if not agent:
             return {"status": "error", "error": f"Agent {agent_id} not found"}
 
+        # Base response with agent info
+        base_response = {
+            "status": "success",
+            "agent_id": agent_id,
+            "container_id": agent.container_id,
+            "processing": self.is_agent_processing(agent_id),
+        }
+
         # If container is running, get from API
         if agent.container_id and self._is_container_running(agent.container_id):
             url = f"http://localhost:{agent.port}/history"
@@ -361,7 +369,8 @@ class AgentManager:
                 try:
                     resp = await client.get(url, params={"count": count})
                     resp.raise_for_status()
-                    return resp.json()
+                    data = resp.json()
+                    return {**base_response, "messages": data.get("messages", [])}
                 except Exception as e:
                     logger.error(f"Failed to get messages from agent {agent_id}: {e}")
 
@@ -377,11 +386,11 @@ class AgentManager:
                     for m in messages
                     if m.get("role") in ("user", "assistant")
                 ]
-                return {"status": "success", "messages": filtered[-count:]}
+                return {**base_response, "messages": filtered[-count:]}
             except Exception as e:
                 logger.error(f"Failed to read session file for agent {agent_id}: {e}")
 
-        return {"status": "success", "messages": []}
+        return {**base_response, "messages": []}
 
     def _extract_text_content(self, content) -> str:
         """Extract text from message content."""
