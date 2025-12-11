@@ -1,0 +1,31 @@
+[project]
+name = "containerized-strands-agents"
+version = "0.1.0"
+description = "MCP server that hosts isolated Strands AI agents in Docker containers"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "docker>=7.0.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+containerized-strands-agents = "containerized_strands_agents.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/containerized_strands_agents"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
