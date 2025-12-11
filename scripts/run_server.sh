@@ -10,4 +10,4 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 mkdir -p "$PROJECT_DIR/data/agents"
 
 # Run the server
-python -m agent_host.server
+python -m containerized_strands_agents.server

@@ -107,19 +107,28 @@ async def list_agents() -> dict:
 ## Project Structure
 
 ```
-slack_events/
+containerized-strands-agents/
 ├── pyproject.toml
+├── README.md
+├── DESIGN.md
 ├── src/
-│   └── agent_host/
+│   └── containerized_strands_agents/
 │       ├── __init__.py
 │       ├── server.py           # FastMCP server + tools
 │       ├── agent_manager.py    # Docker lifecycle, idle monitor
-│       └── config.py           # Timeouts, system prompt
+│       └── config.py           # Timeouts, paths
 ├── docker/
 │   ├── Dockerfile
 │   ├── agent_runner.py         # FastAPI + Strands agent
 │   └── requirements.txt
-└── data/
+├── scripts/
+│   ├── build_docker.sh         # Manual image build (optional)
+│   └── run_server.sh           # Dev server runner
+├── tests/
+│   ├── test_agent_manager.py   # Unit tests
+│   ├── test_integration.py     # Docker integration tests
+│   └── test_e2e.py             # End-to-end tests
+└── data/                       # Created at runtime, gitignored
     ├── tasks.json              # Agent registry (persisted)
     └── agents/{agent_id}/
         ├── session.json        # Conversation history
