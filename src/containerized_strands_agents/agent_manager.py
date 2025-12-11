@@ -90,6 +90,7 @@ class AgentManager:
         self._ensure_network()
         self._ensure_image()
         self._idle_monitor_task: Optional[asyncio.Task] = None
+        self._pending_tasks: dict[str, asyncio.Task] = {}  # agent_id -> background task
 
     def _ensure_network(self):
         """Ensure Docker network exists."""
@@ -301,26 +302,50 @@ class AgentManager:
         aws_profile: str | None = None,
         aws_region: str | None = None,
     ) -> dict:
-        """Send a message to an agent."""
+        """Send a message to an agent (fire-and-forget).
+        
+        Returns immediately after dispatching. Use get_messages to check response.
+        """
         agent = await self.get_or_create_agent(agent_id, aws_profile=aws_profile, aws_region=aws_region)
         
         if agent.status != "running":
             return {"status": "error", "error": f"Agent not running: {agent.status}"}
 
-        url = f"http://localhost:{agent.port}/chat"
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        # Check if agent is already processing a message
+        if agent_id in self._pending_tasks and not self._pending_tasks[agent_id].done():
+            return {
+                "status": "queued",
+                "agent_id": agent_id,
+                "message": "Agent is busy processing a previous message. Your message has been queued.",
+            }
+
+        # Fire and forget - dispatch message in background
+        task = asyncio.create_task(self._process_message(agent_id, agent.port, message))
+        self._pending_tasks[agent_id] = task
+        
+        return {
+            "status": "dispatched",
+            "agent_id": agent_id,
+            "message": "Message sent. Use get_messages to check for response.",
+        }
+
+    async def _process_message(self, agent_id: str, port: int, message: str):
+        """Background task to process a message."""
+        url = f"http://localhost:{port}/chat"
+        async with httpx.AsyncClient(timeout=600.0) as client:
             try:
                 resp = await client.post(url, json={"message": message})
                 resp.raise_for_status()
                 
                 # Update last activity
-                agent.last_activity = datetime.now(timezone.utc).isoformat()
-                self.tracker.update_agent(agent)
+                agent = self.tracker.get_agent(agent_id)
+                if agent:
+                    agent.last_activity = datetime.now(timezone.utc).isoformat()
+                    self.tracker.update_agent(agent)
                 
-                return resp.json()
+                logger.info(f"Agent {agent_id} finished processing message")
             except Exception as e:
                 logger.error(f"Failed to send message to agent {agent_id}: {e}")
-                return {"status": "error", "error": str(e)}
 
     async def get_messages(self, agent_id: str, count: int = 1) -> dict:
         """Get messages from an agent's history."""
@@ -385,9 +410,22 @@ class AgentManager:
                 else:
                     agent.status = "stopped"
             
-            result.append(agent.model_dump())
+            agent_data = agent.model_dump()
+            
+            # Add processing status
+            is_processing = (
+                agent.agent_id in self._pending_tasks 
+                and not self._pending_tasks[agent.agent_id].done()
+            )
+            agent_data["processing"] = is_processing
+            
+            result.append(agent_data)
         
         return result
+    
+    def is_agent_processing(self, agent_id: str) -> bool:
+        """Check if an agent is currently processing a message."""
+        return agent_id in self._pending_tasks and not self._pending_tasks[agent_id].done()
 
     async def stop_agent(self, agent_id: str) -> bool:
         """Stop an agent's container."""

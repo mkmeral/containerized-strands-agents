@@ -4,6 +4,7 @@ An MCP server that hosts isolated Strands AI agents in Docker containers. Each a
 
 ## Features
 
+- **Async/Non-blocking**: `send_message` returns immediately (fire-and-forget), use `get_messages` to poll for responses
 - **Isolated Agents**: Each agent runs in its own Docker container
 - **Session Persistence**: Conversation history is saved and restored across container restarts
 - **AWS Profile Support**: Pass different AWS profiles for different agents
@@ -44,7 +45,9 @@ Add to your MCP configuration (e.g., `~/.kiro/settings/mcp.json`):
 
 #### send_message
 
-Send a message to an agent. Creates the agent if it doesn't exist.
+Send a message to an agent (fire-and-forget). Creates the agent if it doesn't exist.
+
+Returns immediately after dispatching - use `get_messages` to poll for the response.
 
 ```python
 send_message(
@@ -53,26 +56,28 @@ send_message(
     aws_profile="my-profile",      # Optional: AWS profile from ~/.aws/credentials
     aws_region="us-west-2",        # Optional: AWS region (default: us-east-1)
 )
+# Returns: {"status": "dispatched", "agent_id": "my-agent", "message": "..."}
 ```
 
 #### get_messages
 
-Get conversation history from an agent.
+Get conversation history from an agent. Use this to check for responses after `send_message`.
 
 ```python
 get_messages(
     agent_id="my-agent",  # Agent to get messages from
     count=5,              # Number of messages to retrieve (default: 1)
 )
+# Returns: {"status": "success", "messages": [{"role": "assistant", "content": "..."}]}
 ```
 
 #### list_agents
 
-List all agents and their status.
+List all agents and their status (includes `processing: true/false` to indicate if agent is busy).
 
 ```python
 list_agents()
-# Returns: {"status": "success", "agents": [...]}
+# Returns: {"status": "success", "agents": [{"agent_id": "...", "status": "running", "processing": false, ...}]}
 ```
 
 ## Agent Capabilities

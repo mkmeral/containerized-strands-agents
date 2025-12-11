@@ -49,7 +49,10 @@ async def send_message(
     aws_profile: str | None = None,
     aws_region: str | None = None,
 ) -> dict:
-    """Send a message to an agent. Creates the agent if it doesn't exist.
+    """Send a message to an agent (fire-and-forget). Creates the agent if it doesn't exist.
+    
+    This returns immediately after dispatching the message. The agent processes
+    the message in the background. Use get_messages to check for the response.
     
     Args:
         agent_id: Unique identifier for the agent. Use descriptive names like 
@@ -60,7 +63,7 @@ async def send_message(
         aws_region: AWS region for Bedrock. Defaults to us-east-1.
     
     Returns:
-        dict with status and response from the agent.
+        dict with status ("dispatched", "queued", or "error") and agent_id.
     """
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
