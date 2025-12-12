@@ -433,7 +433,6 @@
             <h1>Agents</h1>
             <button class="refresh-btn" onclick="loadAgents()">Refresh</button>
         </div>
-        <button class="new-agent-btn" onclick="showNewAgentForm()">New Agent</button>
         <div class="agents-list" id="agents-list">
             <div class="loading">Loading agents...</div>
         </div>
