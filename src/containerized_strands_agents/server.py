@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastmcp import FastMCP
 
@@ -13,6 +15,92 @@ logger = logging.getLogger(__name__)
 
 # Global agent manager instance
 agent_manager: AgentManager | None = None
+
+
+def _parse_system_prompts_env() -> list[dict[str, str]]:
+    """Parse the CONTAINERIZED_AGENTS_SYSTEM_PROMPTS environment variable.
+    
+    Returns:
+        List of dicts with 'name' and 'path' keys for each available system prompt.
+    """
+    env_var = os.environ.get("CONTAINERIZED_AGENTS_SYSTEM_PROMPTS", "")
+    if not env_var:
+        return []
+    
+    prompts = []
+    for file_path in env_var.split(","):
+        file_path = file_path.strip()
+        if not file_path:
+            continue
+            
+        try:
+            path_obj = Path(file_path).expanduser().resolve()
+            if not path_obj.exists() or not path_obj.is_file():
+                logger.warning(f"System prompt file not found or not a file: {file_path}")
+                continue
+            
+            # Try to extract display name from first line
+            display_name = None
+            try:
+                with open(path_obj, 'r', encoding='utf-8') as f:
+                    first_line = f.readline().strip()
+                    if first_line.startswith('#'):
+                        display_name = first_line[1:].strip()
+            except Exception as e:
+                logger.warning(f"Could not read first line of {file_path}: {e}")
+            
+            # Fallback to filename if no display name found
+            if not display_name:
+                display_name = path_obj.stem
+            
+            prompts.append({
+                'name': display_name,
+                'path': str(path_obj)
+            })
+            
+        except Exception as e:
+            logger.warning(f"Could not process system prompt file {file_path}: {e}")
+            continue
+    
+    return prompts
+
+
+def _build_send_message_docstring() -> str:
+    """Build the docstring for send_message with dynamic system prompt list."""
+    base_docstring = """Send a message to an agent (fire-and-forget). Creates the agent if it doesn't exist.
+    
+    This returns immediately after dispatching the message. The agent processes
+    the message in the background. Use get_messages to check for the response.
+    
+    Args:
+        agent_id: Unique identifier for the agent. Use descriptive names like 
+                  "code-reviewer", "data-analyst", etc.
+        message: The message to send to the agent.
+        aws_profile: AWS profile name to use (from ~/.aws/credentials). 
+                     If not specified, uses default credentials.
+        aws_region: AWS region for Bedrock. Defaults to us-east-1.
+        system_prompt: Custom system prompt for the agent. If provided on first 
+                       message, this will override the default system prompt and 
+                       persist across container restarts.
+        system_prompt_file: Path to a file on the host machine containing the system 
+                            prompt. If both system_prompt and system_prompt_file are 
+                            provided, system_prompt_file takes precedence."""
+    
+    # Get available system prompts
+    available_prompts = _parse_system_prompts_env()
+    if available_prompts:
+        prompt_list = "\n        Available system prompts:\n"
+        for prompt in available_prompts:
+            prompt_list += f"        - {prompt['name']}: {prompt['path']}\n"
+        base_docstring += prompt_list
+    
+    base_docstring += """
+    
+    Returns:
+        dict with status ("dispatched", "queued", or "error") and agent_id.
+    """
+    
+    return base_docstring
 
 
 @asynccontextmanager
@@ -42,8 +130,7 @@ mcp = FastMCP(
 )
 
 
-@mcp.tool
-async def send_message(
+async def _send_message(
     agent_id: str,
     message: str,
     aws_profile: str | None = None,
@@ -51,28 +138,6 @@ async def send_message(
     system_prompt: str | None = None,
     system_prompt_file: str | None = None,
 ) -> dict:
-    """Send a message to an agent (fire-and-forget). Creates the agent if it doesn't exist.
-    
-    This returns immediately after dispatching the message. The agent processes
-    the message in the background. Use get_messages to check for the response.
-    
-    Args:
-        agent_id: Unique identifier for the agent. Use descriptive names like 
-                  "code-reviewer", "data-analyst", etc.
-        message: The message to send to the agent.
-        aws_profile: AWS profile name to use (from ~/.aws/credentials). 
-                     If not specified, uses default credentials.
-        aws_region: AWS region for Bedrock. Defaults to us-east-1.
-        system_prompt: Custom system prompt for the agent. If provided on first 
-                       message, this will override the default system prompt and 
-                       persist across container restarts.
-        system_prompt_file: Path to a file on the host machine containing the system 
-                            prompt. If both system_prompt and system_prompt_file are 
-                            provided, system_prompt_file takes precedence.
-    
-    Returns:
-        dict with status ("dispatched", "queued", or "error") and agent_id.
-    """
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
     
@@ -86,6 +151,10 @@ async def send_message(
         system_prompt_file=system_prompt_file,
     )
     return result
+
+# Dynamically set the docstring and register the tool
+_send_message.__doc__ = _build_send_message_docstring()
+send_message = mcp.tool(_send_message)
 
 
 @mcp.tool
