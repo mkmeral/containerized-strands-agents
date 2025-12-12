@@ -78,6 +78,32 @@ SYSTEM_PROMPT = load_system_prompt()
 os.environ["BYPASS_TOOL_CONSENT"] = "true"
 
 
+def configure_git():
+    """Configure git with GitHub token if available."""
+    import subprocess
+    
+    github_token = os.getenv("GITHUB_TOKEN")
+    if github_token:
+        # Configure git credential helper to use the token
+        subprocess.run(
+            ["git", "config", "--global", "credential.helper", 
+             f"!f() {{ echo \"password={github_token}\"; }}; f"],
+            capture_output=True
+        )
+        logger.info("Configured git with GitHub token")
+    
+    # Always set git identity for commits
+    subprocess.run(
+        ["git", "config", "--global", "user.email", "agent@containerized-strands.local"],
+        capture_output=True
+    )
+    subprocess.run(
+        ["git", "config", "--global", "user.name", "Containerized Agent"],
+        capture_output=True
+    )
+    logger.info("Configured git user identity")
+
+
 class ChatRequest(BaseModel):
     message: str
 
@@ -155,6 +181,7 @@ def get_agent() -> Agent:
 async def startup():
     """Start idle timer on startup."""
     WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    configure_git()
     idle_timer.reset()
     logger.info(f"Agent {AGENT_ID} started. Idle timeout: {IDLE_TIMEOUT_MINUTES} minutes")
 

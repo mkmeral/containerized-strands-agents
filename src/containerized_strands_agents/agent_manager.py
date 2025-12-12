@@ -347,6 +347,11 @@ class AgentManager:
         if custom_system_prompt:
             env["CUSTOM_SYSTEM_PROMPT"] = "true"
         
+        # Pass GitHub token if available (for git push access)
+        github_token = os.environ.get("GITHUB_TOKEN")
+        if github_token:
+            env["GITHUB_TOKEN"] = github_token
+        
         # Build volumes - include AWS credentials directory if it exists
         volumes = {
             str(agent_dir.absolute()): {"bind": "/data", "mode": "rw"},
