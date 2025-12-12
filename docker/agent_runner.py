@@ -1,12 +1,10 @@
 """Agent Runner - FastAPI server running inside Docker container with Strands Agent."""
 
 import asyncio
-import json
 import logging
 import os
 import signal
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from threading import Timer
 from typing import Optional
@@ -19,6 +17,7 @@ from strands import Agent
 from strands.agent.conversation_manager.sliding_window_conversation_manager import (
     SlidingWindowConversationManager,
 )
+from strands.session.file_session_manager import FileSessionManager
 from strands_tools import (
     file_read,
     file_write,
@@ -36,7 +35,6 @@ logger = logging.getLogger(__name__)
 AGENT_ID = os.getenv("AGENT_ID", "default")
 IDLE_TIMEOUT_MINUTES = int(os.getenv("IDLE_TIMEOUT_MINUTES", "30"))
 DATA_DIR = Path("/data")
-SESSION_FILE = DATA_DIR / "session.json"
 WORKSPACE_DIR = DATA_DIR / "workspace"
 CUSTOM_SYSTEM_PROMPT_FILE = DATA_DIR / "system_prompt.txt"
 
@@ -95,35 +93,6 @@ class HistoryResponse(BaseModel):
     messages: list[dict]
 
 
-class FileSessionManager:
-    """Simple file-based session manager for persisting conversation history."""
-
-    def __init__(self, session_file: Path):
-        self.session_file = session_file
-        self.session_file.parent.mkdir(parents=True, exist_ok=True)
-
-    def load_messages(self) -> list:
-        """Load messages from session file."""
-        if self.session_file.exists():
-            try:
-                data = json.loads(self.session_file.read_text())
-                return data.get("messages", [])
-            except Exception as e:
-                logger.error(f"Failed to load session: {e}")
-        return []
-
-    def save_messages(self, messages: list):
-        """Save messages to session file."""
-        try:
-            data = {
-                "agent_id": AGENT_ID,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                "messages": messages,
-            }
-            self.session_file.write_text(json.dumps(data, indent=2, default=str))
-        except Exception as e:
-            logger.error(f"Failed to save session: {e}")
-
 
 class IdleShutdownTimer:
     """Timer that shuts down the container after idle timeout."""
@@ -154,7 +123,10 @@ class IdleShutdownTimer:
 
 # Initialize components
 app = FastAPI(title=f"Agent {AGENT_ID}")
-session_manager = FileSessionManager(SESSION_FILE)
+session_manager = FileSessionManager(
+    session_id=AGENT_ID,
+    storage_dir="/data"
+)
 idle_timer = IdleShutdownTimer(IDLE_TIMEOUT_MINUTES)
 
 # Initialize agent (lazy loading)
@@ -165,19 +137,16 @@ def get_agent() -> Agent:
     """Get or create the Strands agent."""
     global _agent
     if _agent is None:
-        # Load existing messages
-        messages = session_manager.load_messages()
-        
-        # Create agent with tools
+        # Create agent with session manager
         _agent = Agent(
             system_prompt=SYSTEM_PROMPT,
             tools=[file_read, file_write, editor, shell, use_agent, python_repl, load_tool],
-            messages=messages,
+            session_manager=session_manager,
             conversation_manager=SlidingWindowConversationManager(
                 window_size=50,  # Keep last 50 messages
             ),
         )
-        logger.info(f"Agent initialized with {len(messages)} existing messages")
+        logger.info(f"Agent initialized with session manager")
     
     return _agent
 
@@ -192,10 +161,9 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    """Save session on shutdown."""
+    """Cancel idle timer on shutdown."""
     idle_timer.cancel()
-    if _agent:
-        session_manager.save_messages(_agent.messages)
+    # Session manager handles persistence automatically
     logger.info(f"Agent {AGENT_ID} shutting down")
 
 
@@ -217,8 +185,7 @@ async def chat(request: ChatRequest):
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, agent, request.message)
         
-        # Save session after each interaction
-        session_manager.save_messages(agent.messages)
+        # Session manager handles persistence automatically
         
         response_text = str(result)
         
