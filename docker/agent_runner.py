@@ -82,7 +82,7 @@ def configure_git():
     """Configure git with GitHub token if available."""
     import subprocess
     
-    github_token = os.getenv("GITHUB_TOKEN")
+    github_token = os.getenv("CONTAINERIZED_AGENTS_GITHUB_TOKEN")
     if github_token:
         # Configure git credential helper to use the token
         subprocess.run(
