@@ -167,6 +167,40 @@ class AgentManager:
             return prompt_file.read_text()
         return None
 
+    def _read_system_prompt_file(self, file_path: str) -> str:
+        """Read system prompt from a file on the host machine.
+        
+        Args:
+            file_path: Path to the file on the host machine.
+            
+        Returns:
+            str: Content of the file.
+            
+        Raises:
+            FileNotFoundError: If the file doesn't exist.
+            PermissionError: If the file can't be read due to permissions.
+            Exception: For other file reading errors.
+        """
+        try:
+            file_path_obj = Path(file_path).expanduser().resolve()
+            if not file_path_obj.exists():
+                raise FileNotFoundError(f"System prompt file not found: {file_path}")
+            if not file_path_obj.is_file():
+                raise ValueError(f"Path is not a file: {file_path}")
+            
+            with open(file_path_obj, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                
+            if not content:
+                raise ValueError(f"System prompt file is empty: {file_path}")
+                
+            logger.info(f"Successfully read system prompt from file: {file_path}")
+            return content
+            
+        except Exception as e:
+            logger.error(f"Failed to read system prompt file {file_path}: {e}")
+            raise
+
     def _has_existing_session(self, agent_id: str) -> bool:
         """Check if agent has an existing session (messages)."""
         agent_dir = self._get_agent_dir(agent_id)
@@ -209,18 +243,33 @@ class AgentManager:
         aws_profile: str | None = None,
         aws_region: str | None = None,
         system_prompt: str | None = None,
+        system_prompt_file: str | None = None,
     ) -> AgentInfo:
         """Get existing agent or create new one."""
         agent = self.tracker.get_agent(agent_id)
         
-        # Handle system prompt for new or existing agents
-        if system_prompt:
+        # Handle system prompt with precedence: file > text > existing
+        resolved_system_prompt = None
+        try:
+            if system_prompt_file:
+                # system_prompt_file takes precedence over system_prompt
+                resolved_system_prompt = self._read_system_prompt_file(system_prompt_file)
+                logger.info(f"Using system prompt from file {system_prompt_file} for agent {agent_id}")
+            elif system_prompt:
+                resolved_system_prompt = system_prompt
+                logger.info(f"Using provided system prompt for agent {agent_id}")
+        except Exception as e:
+            # If file reading fails, return an error instead of proceeding
+            logger.error(f"Failed to process system prompt file for agent {agent_id}: {e}")
+            raise ValueError(f"Failed to read system prompt file: {e}")
+        
+        if resolved_system_prompt:
             if agent and self._has_existing_session(agent_id):
                 # Agent exists with session - don't change system prompt
                 logger.warning(f"Ignoring system_prompt for agent {agent_id} - agent already has messages")
             else:
                 # New agent or agent without messages - save the system prompt
-                self._save_system_prompt(agent_id, system_prompt)
+                self._save_system_prompt(agent_id, resolved_system_prompt)
         
         if agent and agent.container_id:
             # Check if container is still running
@@ -345,17 +394,26 @@ class AgentManager:
         aws_profile: str | None = None,
         aws_region: str | None = None,
         system_prompt: str | None = None,
+        system_prompt_file: str | None = None,
     ) -> dict:
         """Send a message to an agent (fire-and-forget).
         
         Returns immediately after dispatching. Use get_messages to check response.
         """
-        agent = await self.get_or_create_agent(
-            agent_id, 
-            aws_profile=aws_profile, 
-            aws_region=aws_region,
-            system_prompt=system_prompt
-        )
+        try:
+            agent = await self.get_or_create_agent(
+                agent_id, 
+                aws_profile=aws_profile, 
+                aws_region=aws_region,
+                system_prompt=system_prompt,
+                system_prompt_file=system_prompt_file,
+            )
+        except ValueError as e:
+            # Handle system prompt file errors
+            return {"status": "error", "error": str(e)}
+        except Exception as e:
+            logger.error(f"Failed to get or create agent {agent_id}: {e}")
+            return {"status": "error", "error": f"Failed to initialize agent: {e}"}
         
         if agent.status != "running":
             return {"status": "error", "error": f"Agent not running: {agent.status}"}
