@@ -20,12 +20,37 @@ An MCP server that hosts isolated Strands AI agents in Docker containers. Each a
 ## Installation
 
 ```bash
+# Basic installation
 pip install -e .
+
+# With web UI support
+pip install -e ".[webui]"
+
+# With development tools
+pip install -e ".[dev]"
+
+# All features
+pip install -e ".[webui,dev]"
 ```
 
 The Docker image will be built automatically on first use.
 
 ## Usage
+
+### Web UI (New!)
+
+Launch the web interface for easy agent management:
+
+```bash
+python run_web_ui.py
+```
+
+Then open http://localhost:8000 in your browser to:
+- View all agents with real-time status updates
+- Chat with agents through a clean interface
+- Send messages and see responses in real-time
+- Configure AWS settings and system prompts
+- Auto-refresh every 3 seconds
 
 ### As an MCP Server
 

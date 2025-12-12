@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Containerized Strands Agents</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            background: #fafafa;
+        }
+        
+        .sidebar-header h1 {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+        
+        .agents-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        .agent-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .agent-item:hover {
+            background: #e9ecef;
+        }
+        
+        .agent-item.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .agent-info {
+            flex: 1;
+        }
+        
+        .agent-id {
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .agent-status {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-top: 2px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .status-running {
+            background: #28a745;
+            color: white;
+        }
+        
+        .status-stopped {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .status-error {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .status-processing {
+            background: #ffc107;
+            color: black;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            background: #fafafa;
+        }
+        
+        .no-agent {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6c757d;
+            font-size: 18px;
+        }
+        
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #fafafa;
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .message-header {
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .message-content {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            white-space: pre-wrap;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.5;
+        }
+        
+        .message.user .message-content {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .input-area {
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+            background: white;
+        }
+        
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: none;
+            min-height: 60px;
+        }
+        
+        .message-input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        
+        .send-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            height: fit-content;
+            align-self: flex-end;
+        }
+        
+        .send-btn:hover {
+            background: #0056b3;
+        }
+        
+        .send-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .options-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .option-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px;
+            border: 1px solid #f5c6cb;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: 200px;
+            }
+            
+            .main-content {
+                height: calc(100vh - 200px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1>Agents</h1>
+            <button class="refresh-btn" onclick="loadAgents()">Refresh</button>
+        </div>
+        <div class="agents-list" id="agents-list">
+            <div class="loading">Loading agents...</div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div id="no-agent" class="no-agent">
+            Select an agent to start chatting
+        </div>
+        
+        <div id="chat-container" class="chat-container" style="display: none;">
+            <div class="chat-header">
+                <h2 id="chat-title">Agent Chat</h2>
+            </div>
+            
+            <div class="messages-area" id="messages-area">
+                <div class="loading">Loading messages...</div>
+            </div>
+            
+            <div class="input-area">
+                <div class="input-row">
+                    <textarea 
+                        id="message-input" 
+                        class="message-input" 
+                        placeholder="Type your message..."
+                        onkeydown="handleKeyDown(event)"
+                    ></textarea>
+                    <button class="send-btn" onclick="sendMessage()" id="send-btn">Send</button>
+                </div>
+                
+                <div class="options-row">
+                    <input 
+                        type="text" 
+                        id="aws-profile" 
+                        class="option-input" 
+                        placeholder="AWS Profile (optional)"
+                    />
+                    <input 
+                        type="text" 
+                        id="aws-region" 
+                        class="option-input" 
+                        placeholder="AWS Region (optional)"
+                    />
+                    <input 
+                        type="text" 
+                        id="system-prompt" 
+                        class="option-input" 
+                        placeholder="System Prompt (new agents only)"
+                    />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentAgentId = null;
+        let refreshInterval = null;
+        let messagesInterval = null;
+        
+        // Auto-refresh every 3 seconds
+        function startAutoRefresh() {
+            refreshInterval = setInterval(() => {
+                loadAgents();
+                if (currentAgentId) {
+                    loadMessages(currentAgentId);
+                }
+            }, 3000);
+        }
+        
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+            if (messagesInterval) {
+                clearInterval(messagesInterval);
+                messagesInterval = null;
+            }
+        }
+        
+        // Load agents from API
+        async function loadAgents() {
+            try {
+                const response = await fetch('/agents');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    renderAgents(data.agents);
+                } else {
+                    showError('Failed to load agents');
+                }
+            } catch (error) {
+                showError('Error loading agents: ' + error.message);
+            }
+        }
+        
+        // Render agents in sidebar
+        function renderAgents(agents) {
+            const agentsList = document.getElementById('agents-list');
+            
+            if (agents.length === 0) {
+                agentsList.innerHTML = '<div class="loading">No agents found</div>';
+                return;
+            }
+            
+            agentsList.innerHTML = agents.map(agent => `
+                <div class="agent-item ${agent.agent_id === currentAgentId ? 'active' : ''}" 
+                     onclick="selectAgent('${agent.agent_id}')">
+                    <div class="agent-info">
+                        <div class="agent-id">${agent.agent_id}</div>
+                        <div class="agent-status">
+                            <span class="status-badge status-${agent.status}">${agent.status}</span>
+                            ${agent.processing ? '<span class="status-badge status-processing">Processing</span>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Select an agent
+        async function selectAgent(agentId) {
+            currentAgentId = agentId;
+            
+            // Update UI
+            document.getElementById('no-agent').style.display = 'none';
+            document.getElementById('chat-container').style.display = 'flex';
+            document.getElementById('chat-title').textContent = `Chat with ${agentId}`;
+            
+            // Update active agent in sidebar
+            loadAgents();
+            
+            // Load messages
+            await loadMessages(agentId);
+        }
+        
+        // Load messages for current agent
+        async function loadMessages(agentId) {
+            try {
+                const response = await fetch(`/agents/${agentId}/messages?count=20`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    renderMessages(data.messages);
+                } else if (response.status === 404) {
+                    // Agent doesn't exist yet, show empty chat
+                    renderMessages([]);
+                } else {
+                    showError('Failed to load messages');
+                }
+            } catch (error) {
+                showError('Error loading messages: ' + error.message);
+            }
+        }
+        
+        // Render messages
+        function renderMessages(messages) {
+            const messagesArea = document.getElementById('messages-area');
+            
+            if (messages.length === 0) {
+                messagesArea.innerHTML = '<div class="loading">No messages yet. Send a message to start the conversation.</div>';
+                return;
+            }
+            
+            messagesArea.innerHTML = messages.map(msg => `
+                <div class="message ${msg.role}">
+                    <div class="message-header">${msg.role.toUpperCase()}</div>
+                    <div class="message-content">${escapeHtml(msg.content)}</div>
+                </div>
+            `).join('');
+            
+            // Auto-scroll to bottom
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+        
+        // Send message
+        async function sendMessage() {
+            if (!currentAgentId) return;
+            
+            const messageInput = document.getElementById('message-input');
+            const sendBtn = document.getElementById('send-btn');
+            const message = messageInput.value.trim();
+            
+            if (!message) return;
+            
+            // Get optional parameters
+            const awsProfile = document.getElementById('aws-profile').value.trim() || null;
+            const awsRegion = document.getElementById('aws-region').value.trim() || null;
+            const systemPrompt = document.getElementById('system-prompt').value.trim() || null;
+            
+            // Disable input
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+            
+            try {
+                const response = await fetch(`/agents/${currentAgentId}/message`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        aws_profile: awsProfile,
+                        aws_region: awsRegion,
+                        system_prompt: systemPrompt
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'dispatched' || data.status === 'queued') {
+                    // Clear input
+                    messageInput.value = '';
+                    
+                    // Immediately add user message to UI
+                    addMessageToUI('user', message);
+                    
+                    // Start polling for response
+                    pollForResponse();
+                } else {
+                    showError(data.error || 'Failed to send message');
+                }
+            } catch (error) {
+                showError('Error sending message: ' + error.message);
+            } finally {
+                // Re-enable input
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send';
+                messageInput.focus();
+            }
+        }
+        
+        // Add message to UI immediately
+        function addMessageToUI(role, content) {
+            const messagesArea = document.getElementById('messages-area');
+            
+            // If no messages, clear loading text
+            if (messagesArea.innerHTML.includes('No messages yet')) {
+                messagesArea.innerHTML = '';
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.innerHTML = `
+                <div class="message-header">${role.toUpperCase()}</div>
+                <div class="message-content">${escapeHtml(content)}</div>
+            `;
+            
+            messagesArea.appendChild(messageDiv);
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+        
+        // Poll for response after sending message
+        function pollForResponse() {
+            let attempts = 0;
+            const maxAttempts = 40; // 2 minutes at 3 second intervals
+            
+            const poll = async () => {
+                attempts++;
+                
+                try {
+                    const response = await fetch(`/agents/${currentAgentId}/messages?count=1`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'success' && data.messages.length > 0) {
+                        const lastMessage = data.messages[data.messages.length - 1];
+                        
+                        // Check if this is a new assistant message
+                        const messagesArea = document.getElementById('messages-area');
+                        const lastDisplayed = messagesArea.querySelector('.message:last-child .message-header');
+                        
+                        if (lastMessage.role === 'assistant' && 
+                            (!lastDisplayed || !lastDisplayed.textContent.includes('ASSISTANT'))) {
+                            // Load all messages to get complete conversation
+                            loadMessages(currentAgentId);
+                            return; // Stop polling
+                        }
+                    }
+                    
+                    // Continue polling if not processing and within attempt limit
+                    if (!data.processing && attempts < maxAttempts) {
+                        setTimeout(poll, 3000);
+                    } else if (attempts >= maxAttempts) {
+                        showError('Response timeout. The agent may be taking longer than expected.');
+                    } else {
+                        // Still processing, continue polling
+                        setTimeout(poll, 3000);
+                    }
+                } catch (error) {
+                    console.error('Error polling for response:', error);
+                    if (attempts < maxAttempts) {
+                        setTimeout(poll, 3000);
+                    }
+                }
+            };
+            
+            // Start polling after a short delay
+            setTimeout(poll, 1000);
+        }
+        
+        // Handle Enter key in message input
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        // Show error message
+        function showError(message) {
+            const error = document.createElement('div');
+            error.className = 'error';
+            error.textContent = message;
+            document.body.appendChild(error);
+            
+            setTimeout(() => {
+                error.remove();
+            }, 5000);
+        }
+        
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAgents();
+            startAutoRefresh();
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            stopAutoRefresh();
+        });
+    </script>
+</body>
+</html>
