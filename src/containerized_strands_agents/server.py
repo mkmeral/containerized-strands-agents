@@ -49,6 +49,7 @@ async def send_message(
     aws_profile: str | None = None,
     aws_region: str | None = None,
     system_prompt: str | None = None,
+    system_prompt_file: str | None = None,
 ) -> dict:
     """Send a message to an agent (fire-and-forget). Creates the agent if it doesn't exist.
     
@@ -65,6 +66,9 @@ async def send_message(
         system_prompt: Custom system prompt for the agent. If provided on first 
                        message, this will override the default system prompt and 
                        persist across container restarts.
+        system_prompt_file: Path to a file on the host machine containing the system 
+                            prompt. If both system_prompt and system_prompt_file are 
+                            provided, system_prompt_file takes precedence.
     
     Returns:
         dict with status ("dispatched", "queued", or "error") and agent_id.
@@ -79,6 +83,7 @@ async def send_message(
         aws_profile=aws_profile,
         aws_region=aws_region,
         system_prompt=system_prompt,
+        system_prompt_file=system_prompt_file,
     )
     return result
 
