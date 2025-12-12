@@ -114,6 +114,34 @@ async def list_agents() -> dict:
     return {"status": "success", "agents": agents}
 
 
+@mcp.tool
+async def stop_agent(agent_id: str) -> dict:
+    """Stop an agent's Docker container immediately.
+    
+    Args:
+        agent_id: The ID of the agent to stop.
+    
+    Returns:
+        dict with status ("success" or "error") and details about the operation.
+    """
+    if not agent_manager:
+        return {"status": "error", "error": "Agent manager not initialized"}
+    
+    logger.info(f"Stopping agent {agent_id}")
+    success = await agent_manager.stop_agent(agent_id)
+    
+    if success:
+        return {
+            "status": "success", 
+            "message": f"Agent {agent_id} has been stopped successfully"
+        }
+    else:
+        return {
+            "status": "error", 
+            "error": f"Failed to stop agent {agent_id}. Agent may not exist or container not found."
+        }
+
+
 def main():
     """Run the MCP server."""
     import sys

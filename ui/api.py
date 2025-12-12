@@ -62,6 +62,11 @@ class MessagesResponse(BaseModel):
     agent_id: str = None
     processing: bool = False
 
+class StopAgentResponse(BaseModel):
+    status: str
+    message: str = None
+    error: str = None
+
 # Startup/Shutdown events
 @app.on_event("startup")
 async def startup():
@@ -158,6 +163,29 @@ async def get_messages(agent_id: str, count: int = 10):
         raise
     except Exception as e:
         logger.error(f"Error getting messages from agent {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/agents/{agent_id}", response_model=StopAgentResponse)
+async def stop_agent(agent_id: str):
+    """Stop an agent's Docker container."""
+    if not agent_manager:
+        raise HTTPException(status_code=500, detail="Agent manager not initialized")
+    
+    try:
+        success = await agent_manager.stop_agent(agent_id)
+        
+        if success:
+            return StopAgentResponse(
+                status="success",
+                message=f"Agent {agent_id} has been stopped successfully"
+            )
+        else:
+            return StopAgentResponse(
+                status="error",
+                error=f"Failed to stop agent {agent_id}. Agent may not exist or container not found."
+            )
+    except Exception as e:
+        logger.error(f"Error stopping agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Health check
