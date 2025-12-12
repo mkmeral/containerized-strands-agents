@@ -118,6 +118,41 @@ class TestAgentManager:
         result = manager._extract_text_content(content)
         assert result == "hello\nworld"
 
+    def test_format_tool_use_messages(self, manager):
+        """Test formatting tool use messages."""
+        content = [
+            {"text": "I'll run a command"},
+            {"type": "tool_use", "name": "shell", "input": {"command": "ls"}}
+        ]
+        result = manager._format_tool_use_messages(content)
+        assert len(result) == 2
+        assert result[0]["role"] == "assistant"
+        assert result[0]["content"] == "I'll run a command"
+        assert result[1]["role"] == "tool_use"
+        assert result[1]["tool"] == "shell"
+        assert result[1]["input"] == {"command": "ls"}
+
+    def test_format_tool_result_message(self, manager):
+        """Test formatting tool result messages."""
+        content = [
+            {
+                "type": "tool_result", 
+                "tool_use_id": "123",
+                "content": [{"text": "output here"}]
+            }
+        ]
+        result = manager._format_tool_result_message(content)
+        assert result is not None
+        assert result["role"] == "tool_result"
+        assert result["tool"] == "unknown"  # We don't extract tool name yet
+        assert result["output"] == "output here"
+
+    def test_format_tool_result_message_none(self, manager):
+        """Test tool result message with no tool_result."""
+        content = [{"text": "regular message"}]
+        result = manager._format_tool_result_message(content)
+        assert result is None
+
 
 class TestAgentInfo:
     """Tests for AgentInfo model."""
