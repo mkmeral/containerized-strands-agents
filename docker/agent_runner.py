@@ -14,9 +14,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from strands import Agent
-from strands.agent.conversation_manager.sliding_window_conversation_manager import (
-    SlidingWindowConversationManager,
-)
+from strands.agent.conversation_manager import SummarizingConversationManager
 from strands.session.file_session_manager import FileSessionManager
 from strands_tools import (
     file_read,
@@ -163,16 +161,19 @@ def get_agent() -> Agent:
     """Get or create the Strands agent."""
     global _agent
     if _agent is None:
-        # Create agent with session manager
+        # Create agent with session manager and summarizing conversation manager
+        # SummarizingConversationManager intelligently summarizes older messages
+        # instead of just dropping them, preserving important context
         _agent = Agent(
             system_prompt=SYSTEM_PROMPT,
             tools=[file_read, file_write, editor, shell, use_agent, python_repl, load_tool],
             session_manager=session_manager,
-            conversation_manager=SlidingWindowConversationManager(
-                window_size=50,  # Keep last 50 messages
+            conversation_manager=SummarizingConversationManager(
+                summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed
+                preserve_recent_messages=10,  # Always keep 10 most recent messages
             ),
         )
-        logger.info(f"Agent initialized with session manager")
+        logger.info(f"Agent initialized with SummarizingConversationManager")
     
     return _agent
 
