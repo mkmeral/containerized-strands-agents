@@ -204,12 +204,12 @@ class AgentManager:
     def _has_existing_session(self, agent_id: str) -> bool:
         """Check if agent has an existing session (messages)."""
         agent_dir = self._get_agent_dir(agent_id)
-        session_file = agent_dir / "session.json"
-        if session_file.exists():
+        # FileSessionManager stores messages in: session_{agent_id}/agents/agent_default/messages/
+        messages_dir = agent_dir / f"session_{agent_id}" / "agents" / "agent_default" / "messages"
+        if messages_dir.exists():
             try:
-                data = json.loads(session_file.read_text())
-                messages = data.get("messages", [])
-                return len(messages) > 0
+                message_files = list(messages_dir.glob("message_*.json"))
+                return len(message_files) > 0
             except Exception:
                 return False
         return False
@@ -486,12 +486,23 @@ class AgentManager:
                 except Exception as e:
                     logger.error(f"Failed to get messages from agent {agent_id}: {e}")
 
-        # Fallback: read from session file
-        session_file = AGENTS_DIR / agent_id / "session.json"
-        if session_file.exists():
+        # Fallback: read from FileSessionManager storage
+        # FileSessionManager stores messages in: session_{agent_id}/agents/agent_default/messages/
+        # Each file has structure: {"message": {...}, "message_id": N, ...}
+        messages_dir = AGENTS_DIR / agent_id / f"session_{agent_id}" / "agents" / "agent_default" / "messages"
+        if messages_dir.exists():
             try:
-                data = json.loads(session_file.read_text())
-                messages = data.get("messages", [])
+                # Read all message files and sort by index
+                message_files = sorted(
+                    messages_dir.glob("message_*.json"),
+                    key=lambda f: int(f.stem.split("_")[1])
+                )
+                messages = []
+                for msg_file in message_files:
+                    msg_data = json.loads(msg_file.read_text())
+                    # FileSessionManager wraps message under "message" key
+                    actual_message = msg_data.get("message", msg_data)
+                    messages.append(actual_message)
                 # Process all messages including tool calls
                 formatted = []
                 for msg in messages:
