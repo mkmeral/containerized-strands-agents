@@ -555,65 +555,61 @@ class AgentManager:
         """Format tool use messages from assistant content."""
         if not isinstance(content, list):
             return []
-        
+
         tool_messages = []
         assistant_text = None
-        
+
         for item in content:
             if isinstance(item, dict):
-                if item.get("type") == "tool_use":
-                    # Format tool use message
+                # Handle both formats: toolUse (FileSessionManager) and type: tool_use (API)
+                if "toolUse" in item:
+                    tool_data = item["toolUse"]
+                    tool_messages.append({
+                        "role": "tool_use",
+                        "tool": tool_data.get("name", "unknown"),
+                    })
+                elif item.get("type") == "tool_use":
                     tool_messages.append({
                         "role": "tool_use",
                         "tool": item.get("name", "unknown"),
-                        "input": item.get("input", {})
                     })
                 elif "text" in item and item["text"].strip():
                     if assistant_text is None:
                         assistant_text = item["text"]
                     else:
                         assistant_text += "\n" + item["text"]
-        
+
         # Add assistant text message first if it exists
         messages = []
         if assistant_text and assistant_text.strip():
             messages.append({"role": "assistant", "content": assistant_text})
-        
+
         # Add tool use messages
         messages.extend(tool_messages)
-        
+
         return messages
 
     def _format_tool_result_message(self, content) -> dict | None:
         """Format tool result message from user content."""
         if not isinstance(content, list):
             return None
-        
+
         for item in content:
-            if isinstance(item, dict) and item.get("type") == "tool_result":
-                # Extract tool name and output from tool_result
-                tool_use_id = item.get("tool_use_id", "")
-                
-                # Try to find tool name from the content or use generic
-                tool_name = "unknown"
-                output = ""
-                
-                if "content" in item:
-                    tool_content = item["content"]
-                    if isinstance(tool_content, list):
-                        for content_item in tool_content:
-                            if isinstance(content_item, dict) and "text" in content_item:
-                                output = content_item["text"]
-                                break
-                    elif isinstance(tool_content, str):
-                        output = tool_content
-                
-                return {
-                    "role": "tool_result", 
-                    "tool": tool_name,
-                    "output": output
-                }
-        
+            if isinstance(item, dict):
+                # Handle both formats: toolResult (FileSessionManager) and type: tool_result (API)
+                if "toolResult" in item:
+                    tool_data = item["toolResult"]
+                    status = tool_data.get("status", "unknown")
+                    return {
+                        "role": "tool_result",
+                        "status": status,
+                    }
+                elif item.get("type") == "tool_result":
+                    return {
+                        "role": "tool_result",
+                        "status": item.get("status", "unknown"),
+                    }
+
         return None
 
     def list_agents(self) -> list[dict]:

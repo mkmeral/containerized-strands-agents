@@ -54,7 +54,9 @@ class AgentsResponse(BaseModel):
 
 class Message(BaseModel):
     role: str
-    content: str
+    content: str = None
+    tool: str = None
+    status: str = None
 
 class MessagesResponse(BaseModel):
     status: str
