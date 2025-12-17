@@ -25,6 +25,20 @@ from strands_tools import (
     python_repl,
     load_tool,
 )
+from github_tools import (
+    create_issue,
+    get_issue,
+    update_issue,
+    list_issues,
+    get_issue_comments,
+    add_issue_comment,
+    create_pull_request,
+    get_pull_request,
+    update_pull_request,
+    list_pull_requests,
+    get_pr_review_and_comments,
+    reply_to_review_comment,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -166,7 +180,12 @@ def get_agent() -> Agent:
         # instead of just dropping them, preserving important context
         _agent = Agent(
             system_prompt=SYSTEM_PROMPT,
-            tools=[file_read, file_write, editor, shell, use_agent, python_repl, load_tool],
+            tools=[
+                file_read, file_write, editor, shell, use_agent, python_repl, load_tool,
+                create_issue, get_issue, update_issue, list_issues, get_issue_comments, add_issue_comment,
+                create_pull_request, get_pull_request, update_pull_request, list_pull_requests,
+                get_pr_review_and_comments, reply_to_review_comment,
+            ],
             session_manager=session_manager,
             conversation_manager=SummarizingConversationManager(
                 summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed

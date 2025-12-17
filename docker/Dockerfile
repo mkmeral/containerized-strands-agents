@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy agent runner
 COPY agent_runner.py .
+COPY github_tools.py .
 
 # Create workspace directory
 RUN mkdir -p /data/workspace
