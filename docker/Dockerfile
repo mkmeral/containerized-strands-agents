@@ -15,9 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy agent runner
-COPY agent_runner.py .
-COPY github_tools.py .
+# Copy agent code
+COPY *.py .
 
 # Create workspace directory
 RUN mkdir -p /data/workspace
