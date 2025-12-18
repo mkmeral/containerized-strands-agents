@@ -549,19 +549,45 @@ class AgentManager:
             # Just log - container handles persistence, nothing for us to do
             logger.warning(f"Message dispatch to {agent_id} ended: {e}")
 
-    async def get_messages(self, agent_id: str, count: int = 1) -> dict:
-        """Get messages from an agent's history."""
+    async def _get_agent_processing_state(self, agent: AgentInfo) -> bool:
+        """Check if agent is currently processing by querying health endpoint."""
+        if not agent.container_id or not self._is_container_running(agent.container_id):
+            return False
+        
+        url = f"http://localhost:{agent.port}/health"
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(url, timeout=2.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("processing", False)
+            except Exception:
+                pass
+        return False
+
+    async def get_messages(self, agent_id: str, count: int = 1, include_tool_messages: bool = False) -> dict:
+        """Get messages from an agent's history.
+        
+        Args:
+            agent_id: The agent to get messages from.
+            count: Number of messages to retrieve.
+            include_tool_messages: If True, include tool_use and tool_result messages.
+                                  Defaults to False to avoid large payloads.
+        """
         agent = self.tracker.get_agent(agent_id)
         
         if not agent:
             return {"status": "error", "error": f"Agent {agent_id} not found"}
+
+        # Check processing state from container
+        processing = await self._get_agent_processing_state(agent)
 
         # Base response with agent info
         base_response = {
             "status": "success",
             "agent_id": agent_id,
             "container_id": agent.container_id,
-            "processing": False,  # We don't track this anymore
+            "processing": processing,
         }
 
         # If container is running, get from API
@@ -569,7 +595,7 @@ class AgentManager:
             url = f"http://localhost:{agent.port}/history"
             async with httpx.AsyncClient() as client:
                 try:
-                    resp = await client.get(url, params={"count": count})
+                    resp = await client.get(url, params={"count": count, "include_tool_messages": include_tool_messages})
                     resp.raise_for_status()
                     data = resp.json()
                     return {**base_response, "messages": data.get("messages", [])}
@@ -595,7 +621,38 @@ class AgentManager:
                     actual_message = msg_data.get("message", msg_data)
                     messages.append(actual_message)
                 
-                # Return raw messages - let the UI handle formatting
+                # Filter out tool messages unless requested
+                if not include_tool_messages:
+                    filtered = []
+                    for msg in messages:
+                        role = msg.get("role")
+                        content = msg.get("content", [])
+                        
+                        # Skip user messages that are tool results
+                        if role == "user" and isinstance(content, list):
+                            has_tool_result = any(
+                                isinstance(item, dict) and item.get("type") == "tool_result"
+                                for item in content
+                            )
+                            if has_tool_result:
+                                continue
+                        
+                        # Skip assistant messages that only contain tool_use
+                        if role == "assistant" and isinstance(content, list):
+                            has_tool_use = any(
+                                isinstance(item, dict) and item.get("type") == "tool_use"
+                                for item in content
+                            )
+                            has_text = any(
+                                isinstance(item, dict) and item.get("type") == "text" and item.get("text", "").strip()
+                                for item in content
+                            )
+                            if has_tool_use and not has_text:
+                                continue
+                        
+                        filtered.append(msg)
+                    messages = filtered
+                
                 result = messages[-count:] if count > 0 else messages
                 return {**base_response, "messages": result}
             except Exception as e:
@@ -603,7 +660,7 @@ class AgentManager:
 
         return {**base_response, "messages": []}
 
-    def list_agents(self) -> list[dict]:
+    async def list_agents(self) -> list[dict]:
         """List all agents with their status."""
         agents = self.tracker.load()
         result = []
@@ -617,20 +674,14 @@ class AgentManager:
                     agent.status = "stopped"
             
             agent_data = agent.model_dump()
-            agent_data["processing"] = False  # We don't track this anymore
+            
+            # Get processing state from container health endpoint
+            agent_data["processing"] = await self._get_agent_processing_state(agent)
             
             result.append(agent_data)
         
         return result
     
-    def is_agent_processing(self, agent_id: str) -> bool:
-        """Check if an agent is currently processing a message.
-        
-        Note: We don't track this anymore - always returns False.
-        Kept for backwards compatibility with tests.
-        """
-        return False
-
     async def stop_agent(self, agent_id: str) -> bool:
         """Stop an agent's container."""
         agent = self.tracker.get_agent(agent_id)

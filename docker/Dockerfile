@@ -28,6 +28,9 @@ RUN mkdir -p /data/workspace
 ENV PYTHONUNBUFFERED=1
 ENV AGENT_ID=default
 ENV IDLE_TIMEOUT_MINUTES=30
+ENV BYPASS_TOOL_CONSENT="true"
+ENV STRANDS_NON_INTERACTIVE="true"
+
 
 # AWS credentials will be passed via environment or mounted ~/.aws
 # These can be overridden at runtime

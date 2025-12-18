@@ -161,18 +161,20 @@ async def _send_message(
     )
     return result
 
-# Dynamically set the docstring and register the tool
+# Dynamically set the docstring and register the tool with explicit name
 _send_message.__doc__ = _build_send_message_docstring()
-send_message = mcp.tool(_send_message)
+send_message = mcp.tool(name="send_message")(_send_message)
 
 
 @mcp.tool
-async def get_messages(agent_id: str, count: int = 1) -> dict:
+async def get_messages(agent_id: str, count: int = 1, include_tool_messages: bool = False) -> dict:
     """Get the latest messages from an agent's conversation history.
     
     Args:
         agent_id: The agent to get messages from.
         count: Number of messages to retrieve (default: 1, returns last message).
+        include_tool_messages: If True, include tool_use and tool_result messages.
+                              Defaults to False to keep responses smaller.
     
     Returns:
         dict with status and list of messages (role + content).
@@ -180,7 +182,7 @@ async def get_messages(agent_id: str, count: int = 1) -> dict:
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
     
-    return await agent_manager.get_messages(agent_id, count)
+    return await agent_manager.get_messages(agent_id, count, include_tool_messages)
 
 
 @mcp.tool
@@ -193,7 +195,7 @@ async def list_agents() -> dict:
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
     
-    agents = agent_manager.list_agents()
+    agents = await agent_manager.list_agents()
     return {"status": "success", "agents": agents}
 
 

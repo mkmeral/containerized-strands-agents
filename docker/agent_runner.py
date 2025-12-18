@@ -170,6 +170,9 @@ idle_timer = IdleShutdownTimer(IDLE_TIMEOUT_MINUTES)
 # Initialize agent (lazy loading)
 _agent: Optional[Agent] = None
 
+# Processing state tracking
+_is_processing: bool = False
+
 
 def load_dynamic_tools(agent: Agent):
     """Load tools dynamically from /app/tools/ directory."""
@@ -246,16 +249,22 @@ async def shutdown():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
-    return {"status": "healthy", "agent_id": AGENT_ID}
+    """Health check endpoint with processing state."""
+    return {
+        "status": "healthy",
+        "agent_id": AGENT_ID,
+        "processing": _is_processing,
+    }
 
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """Send a message to the agent."""
+    global _is_processing
     idle_timer.reset()
     
     try:
+        _is_processing = True
         agent = get_agent()
         
         # Run agent in thread pool to not block
@@ -272,12 +281,37 @@ async def chat(request: ChatRequest):
             agent_id=AGENT_ID,
         )
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_message = str(e)
+        logger.error(f"Error processing message: {error_message}")
+        
+        # Save error as an assistant message so it's visible in history
+        try:
+            agent = get_agent()
+            error_content = f"⚠️ **Error**: {error_message}"
+            
+            # Manually add error message to conversation history
+            agent.messages.append({
+                "role": "assistant",
+                "content": [{"type": "text", "text": error_content}]
+            })
+            
+            # Persist the error message
+            if hasattr(agent, 'session_manager') and agent.session_manager:
+                agent.session_manager.save_session(agent.messages)
+        except Exception as save_error:
+            logger.error(f"Failed to save error message: {save_error}")
+        
+        return ChatResponse(
+            status="error",
+            response=error_message,
+            agent_id=AGENT_ID,
+        )
+    finally:
+        _is_processing = False
 
 
 @app.get("/history", response_model=HistoryResponse)
-async def history(count: int = 1):
+async def history(count: int = 1, include_tool_messages: bool = False):
     """Get conversation history."""
     idle_timer.reset()
     
@@ -285,7 +319,39 @@ async def history(count: int = 1):
         agent = get_agent()
         messages = agent.messages
         
-        # Return raw messages - let the UI handle formatting
+        # Filter out tool_use and tool_result messages unless requested
+        if not include_tool_messages:
+            filtered = []
+            for msg in messages:
+                role = msg.get("role")
+                content = msg.get("content", [])
+                
+                # Skip user messages that are tool results
+                if role == "user" and isinstance(content, list):
+                    has_tool_result = any(
+                        isinstance(item, dict) and item.get("type") == "tool_result"
+                        for item in content
+                    )
+                    if has_tool_result:
+                        continue
+                
+                # Skip assistant messages that only contain tool_use
+                if role == "assistant" and isinstance(content, list):
+                    has_tool_use = any(
+                        isinstance(item, dict) and item.get("type") == "tool_use"
+                        for item in content
+                    )
+                    # Check if there's any text content
+                    has_text = any(
+                        isinstance(item, dict) and item.get("type") == "text" and item.get("text", "").strip()
+                        for item in content
+                    )
+                    if has_tool_use and not has_text:
+                        continue
+                
+                filtered.append(msg)
+            messages = filtered
+        
         result = messages[-count:] if count > 0 else messages
         
         return HistoryResponse(

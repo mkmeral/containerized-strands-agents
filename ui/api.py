@@ -54,9 +54,7 @@ class AgentsResponse(BaseModel):
 
 class Message(BaseModel):
     role: str
-    content: str = None
-    tool: str = None
-    status: str = None
+    content: Any = None  # Can be string or list (raw Strands format)
 
 class MessagesResponse(BaseModel):
     status: str
@@ -105,7 +103,7 @@ async def list_agents():
         raise HTTPException(status_code=500, detail="Agent manager not initialized")
     
     try:
-        agents_data = agent_manager.list_agents()
+        agents_data = await agent_manager.list_agents()
         agents = [Agent(**agent) for agent in agents_data]
         
         return AgentsResponse(
