@@ -492,6 +492,12 @@ class AgentManager:
         # Fire and forget - spawn background task that we don't track
         # The container handles everything, we just need to send the request
         asyncio.create_task(self._dispatch_message(agent_id, agent.port, message))
+        
+        return {
+            "status": "dispatched",
+            "agent_id": agent_id,
+            "message": "Message sent. Use get_messages to check for response.",
+        }
     
     async def _dispatch_message(self, agent_id: str, port: int, message: str):
         """Send message to container. Fire and forget - no tracking needed."""
@@ -504,12 +510,6 @@ class AgentManager:
         except Exception as e:
             # Just log - container handles persistence, nothing for us to do
             logger.warning(f"Message dispatch to {agent_id} ended: {e}")
-        
-        return {
-            "status": "dispatched",
-            "agent_id": agent_id,
-            "message": "Message sent. Use get_messages to check for response.",
-        }
 
     async def get_messages(self, agent_id: str, count: int = 1) -> dict:
         """Get messages from an agent's history."""
