@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy agent code
 COPY *.py .
 
+# Create tools directory for dynamic tool loading
+RUN mkdir -p /app/tools
+
 # Create workspace directory
 RUN mkdir -p /data/workspace
 

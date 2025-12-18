@@ -43,20 +43,6 @@ from github_tools import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-def signal_handler(signum, frame):
-    """Log signal received before shutdown."""
-    import traceback
-    sig_name = signal.Signals(signum).name
-    logger.warning(f"!!! RECEIVED SIGNAL: {sig_name} ({signum}) !!!")
-    logger.warning(f"Stack trace at signal:\n{''.join(traceback.format_stack(frame))}")
-
-
-# Register signal handlers to catch what's killing us
-signal.signal(signal.SIGTERM, signal_handler)
-signal.signal(signal.SIGINT, signal_handler)
-
-
 # Configuration from environment
 AGENT_ID = os.getenv("AGENT_ID", "default")
 IDLE_TIMEOUT_MINUTES = int(os.getenv("IDLE_TIMEOUT_MINUTES", "30"))
@@ -185,6 +171,33 @@ idle_timer = IdleShutdownTimer(IDLE_TIMEOUT_MINUTES)
 _agent: Optional[Agent] = None
 
 
+def load_dynamic_tools(agent: Agent):
+    """Load tools dynamically from /app/tools/ directory."""
+    tools_dir = Path("/app/tools")
+    if not tools_dir.exists():
+        logger.info("No /app/tools directory found, skipping dynamic tool loading")
+        return
+    
+    # Find all .py files in the tools directory
+    tool_files = list(tools_dir.glob("*.py"))
+    if not tool_files:
+        logger.info("No .py files found in /app/tools directory")
+        return
+    
+    logger.info(f"Loading {len(tool_files)} dynamic tools from /app/tools/")
+    
+    for tool_file in tool_files:
+        try:
+            # Extract tool name from filename (without .py extension)
+            tool_name = tool_file.stem
+            
+            # Use the load_tool function to dynamically load the tool
+            agent.tool.load_tool(path=str(tool_file), name=tool_name)
+            logger.info(f"Successfully loaded dynamic tool: {tool_name}")
+        except Exception as e:
+            logger.error(f"Failed to load tool {tool_file}: {e}")
+
+
 def get_agent() -> Agent:
     """Get or create the Strands agent."""
     global _agent
@@ -207,6 +220,9 @@ def get_agent() -> Agent:
             ),
         )
         logger.info(f"Agent initialized with SummarizingConversationManager")
+        
+        # Load dynamic tools from /app/tools/ directory
+        load_dynamic_tools(_agent)
     
     return _agent
 
@@ -238,17 +254,13 @@ async def health():
 async def chat(request: ChatRequest):
     """Send a message to the agent."""
     idle_timer.reset()
-    logger.info(f"[CHAT] Received message, length={len(request.message)}")
     
     try:
         agent = get_agent()
-        logger.info(f"[CHAT] Starting agent processing...")
         
         # Run agent in thread pool to not block
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, agent, request.message)
-        
-        logger.info(f"[CHAT] Agent finished processing successfully")
         
         # Session manager handles persistence automatically
         
@@ -260,7 +272,7 @@ async def chat(request: ChatRequest):
             agent_id=AGENT_ID,
         )
     except Exception as e:
-        logger.error(f"[CHAT] Error processing message: {e}", exc_info=True)
+        logger.error(f"Error processing message: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

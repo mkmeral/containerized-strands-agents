@@ -84,7 +84,9 @@ def _build_send_message_docstring() -> str:
                        persist across container restarts.
         system_prompt_file: Path to a file on the host machine containing the system 
                             prompt. If both system_prompt and system_prompt_file are 
-                            provided, system_prompt_file takes precedence."""
+                            provided, system_prompt_file takes precedence.
+        tools: List of paths to .py tool files that only this specific agent gets.
+               These tools are loaded in addition to any global tools."""
     
     # Get available system prompts
     available_prompts = _parse_system_prompts_env()
@@ -137,6 +139,7 @@ async def _send_message(
     aws_region: str | None = None,
     system_prompt: str | None = None,
     system_prompt_file: str | None = None,
+    tools: list[str] | None = None,
 ) -> dict:
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
@@ -149,6 +152,7 @@ async def _send_message(
         aws_region=aws_region,
         system_prompt=system_prompt,
         system_prompt_file=system_prompt_file,
+        tools=tools,
     )
     return result
 

@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -149,7 +150,53 @@ class AgentManager:
         agent_dir = AGENTS_DIR / agent_id
         agent_dir.mkdir(parents=True, exist_ok=True)
         (agent_dir / "workspace").mkdir(exist_ok=True)
+        (agent_dir / "tools").mkdir(exist_ok=True)  # Create tools directory
         return agent_dir
+
+    def _copy_global_tools(self, agent_id: str):
+        """Copy global tools from CONTAINERIZED_AGENTS_TOOLS env var."""
+        global_tools_dir = os.environ.get("CONTAINERIZED_AGENTS_TOOLS")
+        if not global_tools_dir:
+            return
+        
+        global_tools_path = Path(global_tools_dir).expanduser().resolve()
+        if not global_tools_path.exists() or not global_tools_path.is_dir():
+            logger.warning(f"Global tools directory not found or not a directory: {global_tools_dir}")
+            return
+        
+        agent_tools_dir = self._get_agent_dir(agent_id) / "tools"
+        
+        try:
+            # Copy all .py files from global tools directory
+            for tool_file in global_tools_path.glob("*.py"):
+                dest_file = agent_tools_dir / tool_file.name
+                shutil.copy2(tool_file, dest_file)
+                logger.info(f"Copied global tool {tool_file.name} to agent {agent_id}")
+        except Exception as e:
+            logger.error(f"Failed to copy global tools to agent {agent_id}: {e}")
+
+    def _copy_per_agent_tools(self, agent_id: str, tools: list[str] | None):
+        """Copy per-agent tools to the agent's tools directory."""
+        if not tools:
+            return
+        
+        agent_tools_dir = self._get_agent_dir(agent_id) / "tools"
+        
+        for tool_path in tools:
+            try:
+                tool_path_obj = Path(tool_path).expanduser().resolve()
+                if not tool_path_obj.exists():
+                    logger.error(f"Tool file not found: {tool_path}")
+                    continue
+                if not tool_path_obj.is_file() or not tool_path_obj.suffix == '.py':
+                    logger.error(f"Tool path is not a .py file: {tool_path}")
+                    continue
+                
+                dest_file = agent_tools_dir / tool_path_obj.name
+                shutil.copy2(tool_path_obj, dest_file)
+                logger.info(f"Copied per-agent tool {tool_path_obj.name} to agent {agent_id}")
+            except Exception as e:
+                logger.error(f"Failed to copy tool {tool_path} to agent {agent_id}: {e}")
 
     def _save_system_prompt(self, agent_id: str, system_prompt: str):
         """Save custom system prompt for an agent."""
@@ -243,6 +290,7 @@ class AgentManager:
         aws_region: str | None = None,
         system_prompt: str | None = None,
         system_prompt_file: str | None = None,
+        tools: list[str] | None = None,
     ) -> AgentInfo:
         """Get existing agent or create new one."""
         agent = self.tracker.get_agent(agent_id)
@@ -269,6 +317,14 @@ class AgentManager:
             else:
                 # New agent or agent without messages - save the system prompt
                 self._save_system_prompt(agent_id, resolved_system_prompt)
+        
+        # Copy tools before starting/restarting container
+        # Always copy tools for new agents or when tools are specified
+        if not agent or tools:
+            # Copy global tools first
+            self._copy_global_tools(agent_id)
+            # Copy per-agent tools (these can override global tools with same names)
+            self._copy_per_agent_tools(agent_id, tools)
         
         if agent and agent.container_id:
             # Check if container is still running
@@ -356,6 +412,11 @@ class AgentManager:
             str(agent_dir.absolute()): {"bind": "/data", "mode": "rw"},
         }
         
+        # Mount the tools directory into /app/tools for the agent to load
+        agent_tools_dir = agent_dir / "tools"
+        if agent_tools_dir.exists():
+            volumes[str(agent_tools_dir.absolute())] = {"bind": "/app/tools", "mode": "ro"}
+        
         aws_dir = Path.home() / ".aws"
         if aws_dir.exists():
             volumes[str(aws_dir)] = {"bind": "/root/.aws", "mode": "ro"}
@@ -399,6 +460,7 @@ class AgentManager:
         aws_region: str | None = None,
         system_prompt: str | None = None,
         system_prompt_file: str | None = None,
+        tools: list[str] | None = None,
     ) -> dict:
         """Send a message to an agent (fire-and-forget).
         
@@ -411,6 +473,7 @@ class AgentManager:
                 aws_region=aws_region,
                 system_prompt=system_prompt,
                 system_prompt_file=system_prompt_file,
+                tools=tools,
             )
         except ValueError as e:
             # Handle system prompt file errors

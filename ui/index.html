@@ -39,6 +39,13 @@
             margin-bottom: 10px;
         }
         
+        .header-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
         .refresh-btn {
             background: #007bff;
             color: white;
@@ -51,6 +58,22 @@
         
         .refresh-btn:hover {
             background: #0056b3;
+        }
+        
+        .filter-controls {
+            margin-top: 10px;
+        }
+        
+        .filter-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .filter-checkbox input[type="checkbox"] {
+            margin: 0;
         }
         
         .new-agent-btn {
@@ -484,7 +507,15 @@
     <div class="sidebar">
         <div class="sidebar-header">
             <h1>Agents</h1>
-            <button class="refresh-btn" onclick="loadAgents()">Refresh</button>
+            <div class="header-controls">
+                <button class="refresh-btn" onclick="loadAgents()">Refresh</button>
+            </div>
+            <div class="filter-controls">
+                <label class="filter-checkbox">
+                    <input type="checkbox" id="show-all-agents" onchange="toggleShowAllAgents()">
+                    Show all agents (including old)
+                </label>
+            </div>
         </div>
         <button class="new-agent-btn" onclick="showNewAgentForm()">New Agent</button>
         <div class="agents-list" id="agents-list">
@@ -545,6 +576,7 @@
         let currentAgentId = null;
         let refreshInterval = null;
         let messagesInterval = null;
+        let allAgents = []; // Store all agents for filtering
         
         // Auto-refresh every 3 seconds
         function startAutoRefresh() {
@@ -574,7 +606,8 @@
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    renderAgents(data.agents);
+                    allAgents = data.agents; // Store all agents
+                    renderAgents(getFilteredAndSortedAgents());
                 } else {
                     showError('Failed to load agents');
                 }
@@ -583,27 +616,100 @@
             }
         }
         
+        // Get filtered and sorted agents based on current settings
+        function getFilteredAndSortedAgents() {
+            const showAll = document.getElementById('show-all-agents').checked;
+            let agents = [...allAgents];
+            
+            // Filter out old agents (older than 7 days) if not showing all
+            if (!showAll) {
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                
+                agents = agents.filter(agent => {
+                    if (!agent.last_activity) {
+                        // If no last_activity, include only if created recently
+                        if (!agent.created_at) return true;
+                        const createdAt = new Date(agent.created_at);
+                        return createdAt > sevenDaysAgo;
+                    }
+                    
+                    const lastActivity = new Date(agent.last_activity);
+                    return lastActivity > sevenDaysAgo;
+                });
+            }
+            
+            // Sort by last_activity (newest first)
+            agents.sort((a, b) => {
+                const aTime = a.last_activity ? new Date(a.last_activity) : 
+                             a.created_at ? new Date(a.created_at) : new Date(0);
+                const bTime = b.last_activity ? new Date(b.last_activity) : 
+                             b.created_at ? new Date(b.created_at) : new Date(0);
+                return bTime - aTime; // Descending order (newest first)
+            });
+            
+            return agents;
+        }
+        
+        // Toggle show all agents
+        function toggleShowAllAgents() {
+            renderAgents(getFilteredAndSortedAgents());
+        }
+        
         // Render agents in sidebar
         function renderAgents(agents) {
             const agentsList = document.getElementById('agents-list');
             
             if (agents.length === 0) {
-                agentsList.innerHTML = '<div class="loading">No agents found</div>';
+                const showAll = document.getElementById('show-all-agents').checked;
+                const message = showAll ? 'No agents found' : 'No recent agents found (toggle "Show all agents" to see older ones)';
+                agentsList.innerHTML = `<div class="loading">${message}</div>`;
                 return;
             }
             
-            agentsList.innerHTML = agents.map(agent => `
-                <div class="agent-item ${agent.agent_id === currentAgentId ? 'active' : ''}" 
-                     onclick="selectAgent('${agent.agent_id}')">
-                    <div class="agent-info">
-                        <div class="agent-id">${agent.agent_id}</div>
-                        <div class="agent-status">
-                            <span class="status-badge status-${agent.status}">${agent.status}</span>
-                            ${agent.processing ? '<span class="status-badge status-processing">Processing</span>' : ''}
+            agentsList.innerHTML = agents.map(agent => {
+                const lastActivityText = formatLastActivity(agent.last_activity || agent.created_at);
+                
+                return `
+                    <div class="agent-item ${agent.agent_id === currentAgentId ? 'active' : ''}" 
+                         onclick="selectAgent('${agent.agent_id}')">
+                        <div class="agent-info">
+                            <div class="agent-id">${agent.agent_id}</div>
+                            <div class="agent-status">
+                                <span class="status-badge status-${agent.status}">${agent.status}</span>
+                                ${agent.processing ? '<span class="status-badge status-processing">Processing</span>' : ''}
+                            </div>
+                            <div class="agent-status" style="margin-top: 4px; font-size: 11px;">
+                                Last active: ${lastActivityText}
+                            </div>
                         </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
+        }
+        
+        // Format last activity time for display
+        function formatLastActivity(dateString) {
+            if (!dateString) return 'Unknown';
+            
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / (1000 * 60));
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            
+            if (diffMins < 1) {
+                return 'Just now';
+            } else if (diffMins < 60) {
+                return `${diffMins}m ago`;
+            } else if (diffHours < 24) {
+                return `${diffHours}h ago`;
+            } else if (diffDays < 7) {
+                return `${diffDays}d ago`;
+            } else {
+                return date.toLocaleDateString();
+            }
         }
         
         // Select an agent
@@ -615,8 +721,8 @@
             document.getElementById('chat-container').style.display = 'flex';
             document.getElementById('chat-title').textContent = `Chat with ${agentId}`;
             
-            // Update active agent in sidebar
-            loadAgents();
+            // Update active agent in sidebar (re-render with current filter)
+            renderAgents(getFilteredAndSortedAgents());
             
             // Load messages
             await loadMessages(agentId);
@@ -831,6 +937,11 @@
             setTimeout(() => {
                 error.remove();
             }, 5000);
+        }
+        
+        // Show new agent form (placeholder - can be enhanced later)
+        function showNewAgentForm() {
+            alert('New agent creation form would be implemented here. For now, agents are created automatically when you send a message to a new agent ID.');
         }
         
         // Escape HTML
