@@ -43,6 +43,20 @@ from github_tools import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def signal_handler(signum, frame):
+    """Log signal received before shutdown."""
+    import traceback
+    sig_name = signal.Signals(signum).name
+    logger.warning(f"!!! RECEIVED SIGNAL: {sig_name} ({signum}) !!!")
+    logger.warning(f"Stack trace at signal:\n{''.join(traceback.format_stack(frame))}")
+
+
+# Register signal handlers to catch what's killing us
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+
 # Configuration from environment
 AGENT_ID = os.getenv("AGENT_ID", "default")
 IDLE_TIMEOUT_MINUTES = int(os.getenv("IDLE_TIMEOUT_MINUTES", "30"))
@@ -224,13 +238,17 @@ async def health():
 async def chat(request: ChatRequest):
     """Send a message to the agent."""
     idle_timer.reset()
+    logger.info(f"[CHAT] Received message, length={len(request.message)}")
     
     try:
         agent = get_agent()
+        logger.info(f"[CHAT] Starting agent processing...")
         
         # Run agent in thread pool to not block
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, agent, request.message)
+        
+        logger.info(f"[CHAT] Agent finished processing successfully")
         
         # Session manager handles persistence automatically
         
@@ -242,7 +260,7 @@ async def chat(request: ChatRequest):
             agent_id=AGENT_ID,
         )
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
+        logger.error(f"[CHAT] Error processing message: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -90,7 +90,6 @@ class AgentManager:
         self._ensure_network()
         self._ensure_image()
         self._idle_monitor_task: Optional[asyncio.Task] = None
-        self._pending_tasks: dict[str, asyncio.Task] = {}  # agent_id -> background task
 
     def _ensure_network(self):
         """Ensure Docker network exists."""
@@ -423,41 +422,31 @@ class AgentManager:
         if agent.status != "running":
             return {"status": "error", "error": f"Agent not running: {agent.status}"}
 
-        # Check if agent is already processing a message
-        if agent_id in self._pending_tasks and not self._pending_tasks[agent_id].done():
-            return {
-                "status": "queued",
-                "agent_id": agent_id,
-                "message": "Agent is busy processing a previous message. Your message has been queued.",
-            }
-
-        # Fire and forget - dispatch message in background
-        task = asyncio.create_task(self._process_message(agent_id, agent.port, message))
-        self._pending_tasks[agent_id] = task
+        # Update last activity now (we're about to send)
+        agent.last_activity = datetime.now(timezone.utc).isoformat()
+        self.tracker.update_agent(agent)
+        
+        # Fire and forget - spawn background task that we don't track
+        # The container handles everything, we just need to send the request
+        asyncio.create_task(self._dispatch_message(agent_id, agent.port, message))
+    
+    async def _dispatch_message(self, agent_id: str, port: int, message: str):
+        """Send message to container. Fire and forget - no tracking needed."""
+        url = f"http://localhost:{port}/chat"
+        try:
+            # Long timeout since agent tasks can take a while
+            async with httpx.AsyncClient(timeout=httpx.Timeout(3600.0, connect=30.0)) as client:
+                await client.post(url, json={"message": message})
+                logger.info(f"Agent {agent_id} finished processing")
+        except Exception as e:
+            # Just log - container handles persistence, nothing for us to do
+            logger.warning(f"Message dispatch to {agent_id} ended: {e}")
         
         return {
             "status": "dispatched",
             "agent_id": agent_id,
             "message": "Message sent. Use get_messages to check for response.",
         }
-
-    async def _process_message(self, agent_id: str, port: int, message: str):
-        """Background task to process a message."""
-        url = f"http://localhost:{port}/chat"
-        async with httpx.AsyncClient(timeout=600.0) as client:
-            try:
-                resp = await client.post(url, json={"message": message})
-                resp.raise_for_status()
-                
-                # Update last activity
-                agent = self.tracker.get_agent(agent_id)
-                if agent:
-                    agent.last_activity = datetime.now(timezone.utc).isoformat()
-                    self.tracker.update_agent(agent)
-                
-                logger.info(f"Agent {agent_id} finished processing message")
-            except Exception as e:
-                logger.error(f"Failed to send message to agent {agent_id}: {e}")
 
     async def get_messages(self, agent_id: str, count: int = 1) -> dict:
         """Get messages from an agent's history."""
@@ -471,7 +460,7 @@ class AgentManager:
             "status": "success",
             "agent_id": agent_id,
             "container_id": agent.container_id,
-            "processing": self.is_agent_processing(agent_id),
+            "processing": False,  # We don't track this anymore
         }
 
         # If container is running, get from API
@@ -626,21 +615,19 @@ class AgentManager:
                     agent.status = "stopped"
             
             agent_data = agent.model_dump()
-            
-            # Add processing status
-            is_processing = (
-                agent.agent_id in self._pending_tasks 
-                and not self._pending_tasks[agent.agent_id].done()
-            )
-            agent_data["processing"] = is_processing
+            agent_data["processing"] = False  # We don't track this anymore
             
             result.append(agent_data)
         
         return result
     
     def is_agent_processing(self, agent_id: str) -> bool:
-        """Check if an agent is currently processing a message."""
-        return agent_id in self._pending_tasks and not self._pending_tasks[agent_id].done()
+        """Check if an agent is currently processing a message.
+        
+        Note: We don't track this anymore - always returns False.
+        Kept for backwards compatibility with tests.
+        """
+        return False
 
     async def stop_agent(self, agent_id: str) -> bool:
         """Stop an agent's container."""
