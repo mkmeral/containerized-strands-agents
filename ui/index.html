@@ -236,6 +236,16 @@
             color: #6c757d;
         }
         
+        .tool-params {
+            font-size: 11px;
+            color: #6c757d;
+            font-family: monospace;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
         .main-content {
             flex: 1;
             display: flex;
@@ -787,7 +797,11 @@
                                     text = '';
                                 }
                                 const toolData = item.toolUse || item;
-                                displayMessages.push({ type: 'tool_use', tool: toolData.name || 'unknown' });
+                                displayMessages.push({ 
+                                    type: 'tool_use', 
+                                    tool: toolData.name || 'unknown',
+                                    input: toolData.input || null
+                                });
                             }
                         }
                         // Add remaining text
@@ -802,11 +816,13 @@
             
             messagesArea.innerHTML = displayMessages.map(msg => {
                 if (msg.type === 'tool_use') {
+                    const inputStr = msg.input ? formatToolInput(msg.input) : '';
                     return `
                         <div class="message tool_use">
                             <div class="message-content">
                                 <span class="tool-icon">⚙️</span>
                                 <span class="tool-badge tool-name">${escapeHtml(msg.tool)}</span>
+                                ${inputStr ? `<span class="tool-params">${escapeHtml(inputStr)}</span>` : ''}
                             </div>
                         </div>
                     `;
@@ -834,6 +850,24 @@
             
             // Auto-scroll to bottom
             messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+        
+        // Format tool input for display
+        function formatToolInput(input) {
+            if (!input) return '';
+            if (typeof input === 'string') return input;
+            
+            // For objects, show key=value pairs, truncating long values
+            const parts = [];
+            for (const [key, value] of Object.entries(input)) {
+                let valStr = typeof value === 'string' ? value : JSON.stringify(value);
+                // Truncate long values
+                if (valStr.length > 50) {
+                    valStr = valStr.substring(0, 47) + '...';
+                }
+                parts.push(`${key}=${valStr}`);
+            }
+            return parts.join(', ');
         }
         
         // Extract text from Strands content array
