@@ -747,7 +747,7 @@
             }
         }
         
-        // Render messages
+        // Render messages - handles raw Strands message format
         function renderMessages(messages) {
             const messagesArea = document.getElementById('messages-area');
             
@@ -756,8 +756,52 @@
                 return;
             }
             
-            messagesArea.innerHTML = messages.map(msg => {
-                if (msg.role === 'tool_use') {
+            // Process raw Strands messages into display format
+            const displayMessages = [];
+            for (const msg of messages) {
+                const content = msg.content || [];
+                
+                if (msg.role === 'user') {
+                    // Check for tool_result in content
+                    const toolResult = Array.isArray(content) && content.find(c => c.type === 'tool_result' || c.toolResult);
+                    if (toolResult) {
+                        const result = toolResult.toolResult || toolResult;
+                        const status = result.status || (result.is_error ? 'error' : 'success');
+                        displayMessages.push({ type: 'tool_result', status });
+                    } else {
+                        // Regular user message
+                        const text = extractText(content);
+                        if (text) displayMessages.push({ type: 'user', content: text });
+                    }
+                } else if (msg.role === 'assistant') {
+                    // Extract text and tool_use from content
+                    if (Array.isArray(content)) {
+                        let text = '';
+                        for (const item of content) {
+                            if (item.type === 'text' || item.text) {
+                                text += (item.text || '') + '\n';
+                            } else if (item.type === 'tool_use' || item.toolUse) {
+                                // Add any accumulated text first
+                                if (text.trim()) {
+                                    displayMessages.push({ type: 'assistant', content: text.trim() });
+                                    text = '';
+                                }
+                                const toolData = item.toolUse || item;
+                                displayMessages.push({ type: 'tool_use', tool: toolData.name || 'unknown' });
+                            }
+                        }
+                        // Add remaining text
+                        if (text.trim()) {
+                            displayMessages.push({ type: 'assistant', content: text.trim() });
+                        }
+                    } else if (typeof content === 'string') {
+                        displayMessages.push({ type: 'assistant', content });
+                    }
+                }
+            }
+            
+            messagesArea.innerHTML = displayMessages.map(msg => {
+                if (msg.type === 'tool_use') {
                     return `
                         <div class="message tool_use">
                             <div class="message-content">
@@ -766,7 +810,7 @@
                             </div>
                         </div>
                     `;
-                } else if (msg.role === 'tool_result') {
+                } else if (msg.type === 'tool_result') {
                     const statusClass = msg.status === 'success' ? 'status-success' : 
                                        msg.status === 'error' ? 'status-error' : 'status-unknown';
                     const icon = msg.status === 'success' ? '✓' : msg.status === 'error' ? '✗' : '?';
@@ -780,8 +824,8 @@
                     `;
                 } else {
                     return `
-                        <div class="message ${msg.role}">
-                            <div class="message-header">${msg.role.toUpperCase()}</div>
+                        <div class="message ${msg.type}">
+                            <div class="message-header">${msg.type.toUpperCase()}</div>
                             <div class="message-content">${escapeHtml(msg.content || '')}</div>
                         </div>
                     `;
@@ -790,6 +834,16 @@
             
             // Auto-scroll to bottom
             messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+        
+        // Extract text from Strands content array
+        function extractText(content) {
+            if (typeof content === 'string') return content;
+            if (!Array.isArray(content)) return '';
+            return content
+                .filter(c => c.type === 'text' || c.text)
+                .map(c => c.text || '')
+                .join('\n');
         }
         
         // Send message

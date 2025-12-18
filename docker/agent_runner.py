@@ -285,123 +285,16 @@ async def history(count: int = 1):
         agent = get_agent()
         messages = agent.messages
         
-        # Process all messages including tool calls
-        formatted = []
-        for msg in messages:
-            role = msg.get("role")
-            content = msg.get("content", [])
-            
-            if role == "user":
-                # Check if this is a tool result
-                tool_result_msg = _format_tool_result_message(content)
-                if tool_result_msg:
-                    formatted.append(tool_result_msg)
-                else:
-                    # Regular user message
-                    text_content = _extract_text_content(content)
-                    if text_content:
-                        formatted.append({"role": "user", "content": text_content})
-            
-            elif role == "assistant":
-                # Check if this contains tool uses
-                tool_use_msgs = _format_tool_use_messages(content)
-                if tool_use_msgs:
-                    formatted.extend(tool_use_msgs)
-                else:
-                    # Regular assistant response
-                    text_content = _extract_text_content(content)
-                    if text_content:
-                        formatted.append({"role": "assistant", "content": text_content})
+        # Return raw messages - let the UI handle formatting
+        result = messages[-count:] if count > 0 else messages
         
         return HistoryResponse(
             status="success",
-            messages=formatted[-count:] if count > 0 else formatted,
+            messages=result,
         )
     except Exception as e:
         logger.error(f"Error getting history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-def _extract_text_content(content) -> str:
-    """Extract text from message content."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        texts = []
-        for item in content:
-            if isinstance(item, dict) and "text" in item:
-                texts.append(item["text"])
-            elif isinstance(item, str):
-                texts.append(item)
-        return "\n".join(texts)
-    return ""
-
-
-def _format_tool_use_messages(content) -> list[dict]:
-    """Format tool use messages from assistant content."""
-    if not isinstance(content, list):
-        return []
-    
-    tool_messages = []
-    assistant_text = None
-    
-    for item in content:
-        if isinstance(item, dict):
-            if item.get("type") == "tool_use":
-                # Format tool use message
-                tool_messages.append({
-                    "role": "tool_use",
-                    "tool": item.get("name", "unknown"),
-                    "input": item.get("input", {})
-                })
-            elif "text" in item and item["text"].strip():
-                if assistant_text is None:
-                    assistant_text = item["text"]
-                else:
-                    assistant_text += "\n" + item["text"]
-    
-    # Add assistant text message first if it exists
-    messages = []
-    if assistant_text and assistant_text.strip():
-        messages.append({"role": "assistant", "content": assistant_text})
-    
-    # Add tool use messages
-    messages.extend(tool_messages)
-    
-    return messages
-
-
-def _format_tool_result_message(content) -> dict | None:
-    """Format tool result message from user content."""
-    if not isinstance(content, list):
-        return None
-    
-    for item in content:
-        if isinstance(item, dict) and item.get("type") == "tool_result":
-            # Extract tool name and output from tool_result
-            tool_use_id = item.get("tool_use_id", "")
-            
-            # Try to find tool name from the content or use generic
-            tool_name = "unknown"
-            output = ""
-            
-            if "content" in item:
-                tool_content = item["content"]
-                if isinstance(tool_content, list):
-                    for content_item in tool_content:
-                        if isinstance(content_item, dict) and "text" in content_item:
-                            output = content_item["text"]
-                            break
-                elif isinstance(tool_content, str):
-                    output = tool_content
-            
-            return {
-                "role": "tool_result", 
-                "tool": tool_name,
-                "output": output
-            }
-    
-    return None
 
 
 if __name__ == "__main__":

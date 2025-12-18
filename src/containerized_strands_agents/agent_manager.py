@@ -555,114 +555,14 @@ class AgentManager:
                     # FileSessionManager wraps message under "message" key
                     actual_message = msg_data.get("message", msg_data)
                     messages.append(actual_message)
-                # Process all messages including tool calls
-                formatted = []
-                for msg in messages:
-                    role = msg.get("role")
-                    content = msg.get("content", [])
-                    
-                    if role == "user":
-                        # Check if this is a tool result
-                        tool_result_msg = self._format_tool_result_message(content)
-                        if tool_result_msg:
-                            formatted.append(tool_result_msg)
-                        else:
-                            # Regular user message
-                            text_content = self._extract_text_content(content)
-                            if text_content:
-                                formatted.append({"role": "user", "content": text_content})
-                    
-                    elif role == "assistant":
-                        # Check if this contains tool uses
-                        tool_use_msgs = self._format_tool_use_messages(content)
-                        if tool_use_msgs:
-                            formatted.extend(tool_use_msgs)
-                        else:
-                            # Regular assistant response
-                            text_content = self._extract_text_content(content)
-                            if text_content:
-                                formatted.append({"role": "assistant", "content": text_content})
                 
-                return {**base_response, "messages": formatted[-count:] if count > 0 else formatted}
+                # Return raw messages - let the UI handle formatting
+                result = messages[-count:] if count > 0 else messages
+                return {**base_response, "messages": result}
             except Exception as e:
                 logger.error(f"Failed to read session file for agent {agent_id}: {e}")
 
         return {**base_response, "messages": []}
-
-    def _extract_text_content(self, content) -> str:
-        """Extract text from message content."""
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            texts = []
-            for item in content:
-                if isinstance(item, dict) and "text" in item:
-                    texts.append(item["text"])
-                elif isinstance(item, str):
-                    texts.append(item)
-            return "\n".join(texts)
-        return str(content)
-
-    def _format_tool_use_messages(self, content) -> list[dict]:
-        """Format tool use messages from assistant content."""
-        if not isinstance(content, list):
-            return []
-
-        tool_messages = []
-        assistant_text = None
-
-        for item in content:
-            if isinstance(item, dict):
-                # Handle both formats: toolUse (FileSessionManager) and type: tool_use (API)
-                if "toolUse" in item:
-                    tool_data = item["toolUse"]
-                    tool_messages.append({
-                        "role": "tool_use",
-                        "tool": tool_data.get("name", "unknown"),
-                    })
-                elif item.get("type") == "tool_use":
-                    tool_messages.append({
-                        "role": "tool_use",
-                        "tool": item.get("name", "unknown"),
-                    })
-                elif "text" in item and item["text"].strip():
-                    if assistant_text is None:
-                        assistant_text = item["text"]
-                    else:
-                        assistant_text += "\n" + item["text"]
-
-        # Add assistant text message first if it exists
-        messages = []
-        if assistant_text and assistant_text.strip():
-            messages.append({"role": "assistant", "content": assistant_text})
-
-        # Add tool use messages
-        messages.extend(tool_messages)
-
-        return messages
-
-    def _format_tool_result_message(self, content) -> dict | None:
-        """Format tool result message from user content."""
-        if not isinstance(content, list):
-            return None
-
-        for item in content:
-            if isinstance(item, dict):
-                # Handle both formats: toolResult (FileSessionManager) and type: tool_result (API)
-                if "toolResult" in item:
-                    tool_data = item["toolResult"]
-                    status = tool_data.get("status", "unknown")
-                    return {
-                        "role": "tool_result",
-                        "status": status,
-                    }
-                elif item.get("type") == "tool_result":
-                    return {
-                        "role": "tool_result",
-                        "status": item.get("status", "unknown"),
-                    }
-
-        return None
 
     def list_agents(self) -> list[dict]:
         """List all agents with their status."""
