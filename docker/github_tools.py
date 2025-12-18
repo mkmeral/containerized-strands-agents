@@ -32,6 +32,7 @@ from strands_tools.utils import console_util
 
 console = console_util.create()
 
+GITHUB_TOKEN_VAR = "CONTAINERIZED_AGENTS_GITHUB_TOKEN"
 
 def log_inputs(func):
     """Decorator to log function inputs in a blue panel."""
@@ -58,9 +59,9 @@ def _github_request(
     if not repo:
         return "Error: GITHUB_REPOSITORY environment variable not found"
 
-    token = os.environ.get("GITHUB_TOKEN")
+    token = os.environ.get(GITHUB_TOKEN_VAR)
     if not token:
-        return "Error: GITHUB_TOKEN environment variable not found"
+        return f"Error: {GITHUB_TOKEN_VAR} environment variable not found"
 
     url = f"https://api.github.com/repos/{repo}/{endpoint}"
     headers = {
@@ -316,9 +317,9 @@ def get_pr_review_and_comments(pr_number: int, show_resolved: bool = False, repo
     if not repo:
         return "Error: GITHUB_REPOSITORY environment variable not found"
 
-    token = os.environ.get("GITHUB_TOKEN")
+    token = os.environ.get(GITHUB_TOKEN_VAR)
     if not token:
-        return "Error: GITHUB_TOKEN environment variable not found"
+        return f"Error: {GITHUB_TOKEN_VAR} environment variable not found"
 
     owner, repo_name = repo.split("/")
     
