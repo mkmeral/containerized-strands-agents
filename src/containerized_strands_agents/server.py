@@ -86,7 +86,10 @@ def _build_send_message_docstring() -> str:
                             prompt. If both system_prompt and system_prompt_file are 
                             provided, system_prompt_file takes precedence.
         tools: List of paths to .py tool files that only this specific agent gets.
-               These tools are loaded in addition to any global tools."""
+               These tools are loaded in addition to any global tools.
+        data_dir: Custom data directory for this agent. If provided, agent data 
+                  (workspace, session, tools) will be stored there instead of the 
+                  default location. Useful for project-specific agents."""
     
     # Get available system prompts
     available_prompts = _parse_system_prompts_env()
@@ -140,6 +143,7 @@ async def _send_message(
     system_prompt: str | None = None,
     system_prompt_file: str | None = None,
     tools: list[str] | None = None,
+    data_dir: str | None = None,
 ) -> dict:
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
@@ -153,6 +157,7 @@ async def _send_message(
         system_prompt=system_prompt,
         system_prompt_file=system_prompt_file,
         tools=tools,
+        data_dir=data_dir,
     )
     return result
 

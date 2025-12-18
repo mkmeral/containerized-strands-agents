@@ -22,6 +22,8 @@
 | `aws_region` | AWS region for Bedrock (default: us-east-1) |
 | `system_prompt` | Custom system prompt text |
 | `system_prompt_file` | Path to file containing system prompt |
+| `tools` | List of paths to .py tool files for this agent |
+| `data_dir` | Custom data directory for this agent (project-specific) |
 
 ### Environment Variables (server-level)
 

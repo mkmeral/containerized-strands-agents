@@ -37,6 +37,7 @@ class AgentInfo(BaseModel):
     status: str  # running, stopped, error
     created_at: str
     last_activity: str
+    data_dir: Optional[str] = None  # Custom data directory for this agent
 
 
 class TaskTracker:
@@ -145,15 +146,28 @@ class AgentManager:
         self._port_counter += 1
         return port
 
-    def _get_agent_dir(self, agent_id: str) -> Path:
-        """Get the data directory for an agent."""
-        agent_dir = AGENTS_DIR / agent_id
+    def _get_agent_dir(self, agent_id: str, custom_data_dir: str | None = None) -> Path:
+        """Get the data directory for an agent.
+        
+        Args:
+            agent_id: The agent identifier.
+            custom_data_dir: Optional custom data directory path. If provided,
+                           the agent data will be stored there instead of the
+                           default AGENTS_DIR.
+        """
+        if custom_data_dir:
+            # Use custom data directory - resolve and expand user paths
+            agent_dir = Path(custom_data_dir).expanduser().resolve()
+        else:
+            # Use default agents directory
+            agent_dir = AGENTS_DIR / agent_id
+        
         agent_dir.mkdir(parents=True, exist_ok=True)
         (agent_dir / "workspace").mkdir(exist_ok=True)
-        (agent_dir / "tools").mkdir(exist_ok=True)  # Create tools directory
+        (agent_dir / "tools").mkdir(exist_ok=True)
         return agent_dir
 
-    def _copy_global_tools(self, agent_id: str):
+    def _copy_global_tools(self, agent_id: str, data_dir: str | None = None):
         """Copy global tools from CONTAINERIZED_AGENTS_TOOLS env var."""
         global_tools_dir = os.environ.get("CONTAINERIZED_AGENTS_TOOLS")
         if not global_tools_dir:
@@ -164,7 +178,7 @@ class AgentManager:
             logger.warning(f"Global tools directory not found or not a directory: {global_tools_dir}")
             return
         
-        agent_tools_dir = self._get_agent_dir(agent_id) / "tools"
+        agent_tools_dir = self._get_agent_dir(agent_id, data_dir) / "tools"
         
         try:
             # Copy all .py files from global tools directory
@@ -175,12 +189,12 @@ class AgentManager:
         except Exception as e:
             logger.error(f"Failed to copy global tools to agent {agent_id}: {e}")
 
-    def _copy_per_agent_tools(self, agent_id: str, tools: list[str] | None):
+    def _copy_per_agent_tools(self, agent_id: str, tools: list[str] | None, data_dir: str | None = None):
         """Copy per-agent tools to the agent's tools directory."""
         if not tools:
             return
         
-        agent_tools_dir = self._get_agent_dir(agent_id) / "tools"
+        agent_tools_dir = self._get_agent_dir(agent_id, data_dir) / "tools"
         
         for tool_path in tools:
             try:
@@ -198,16 +212,16 @@ class AgentManager:
             except Exception as e:
                 logger.error(f"Failed to copy tool {tool_path} to agent {agent_id}: {e}")
 
-    def _save_system_prompt(self, agent_id: str, system_prompt: str):
+    def _save_system_prompt(self, agent_id: str, system_prompt: str, data_dir: str | None = None):
         """Save custom system prompt for an agent."""
-        agent_dir = self._get_agent_dir(agent_id)
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
         prompt_file = agent_dir / "system_prompt.txt"
         prompt_file.write_text(system_prompt)
         logger.info(f"Saved custom system prompt for agent {agent_id}")
 
-    def _load_system_prompt(self, agent_id: str) -> Optional[str]:
+    def _load_system_prompt(self, agent_id: str, data_dir: str | None = None) -> Optional[str]:
         """Load custom system prompt for an agent."""
-        agent_dir = self._get_agent_dir(agent_id)
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
         prompt_file = agent_dir / "system_prompt.txt"
         if prompt_file.exists():
             return prompt_file.read_text()
@@ -247,9 +261,9 @@ class AgentManager:
             logger.error(f"Failed to read system prompt file {file_path}: {e}")
             raise
 
-    def _has_existing_session(self, agent_id: str) -> bool:
+    def _has_existing_session(self, agent_id: str, data_dir: str | None = None) -> bool:
         """Check if agent has an existing session (messages)."""
-        agent_dir = self._get_agent_dir(agent_id)
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
         # FileSessionManager stores messages in: session_{agent_id}/agents/agent_default/messages/
         messages_dir = agent_dir / f"session_{agent_id}" / "agents" / "agent_default" / "messages"
         if messages_dir.exists():
@@ -291,9 +305,24 @@ class AgentManager:
         system_prompt: str | None = None,
         system_prompt_file: str | None = None,
         tools: list[str] | None = None,
+        data_dir: str | None = None,
     ) -> AgentInfo:
-        """Get existing agent or create new one."""
+        """Get existing agent or create new one.
+        
+        Args:
+            data_dir: Optional custom data directory for this agent. If provided,
+                     agent data will be stored there instead of the default location.
+                     Useful for project-specific agents.
+        """
         agent = self.tracker.get_agent(agent_id)
+        
+        # If agent exists and data_dir is provided, update it
+        if agent and data_dir:
+            agent.data_dir = data_dir
+            self.tracker.update_agent(agent)
+        
+        # Use agent's stored data_dir or the provided one
+        effective_data_dir = data_dir or (agent.data_dir if agent else None)
         
         # Handle system prompt with precedence: file > text > existing
         resolved_system_prompt = None
@@ -311,20 +340,20 @@ class AgentManager:
             raise ValueError(f"Failed to read system prompt file: {e}")
         
         if resolved_system_prompt:
-            if agent and self._has_existing_session(agent_id):
+            if agent and self._has_existing_session(agent_id, effective_data_dir):
                 # Agent exists with session - don't change system prompt
                 logger.warning(f"Ignoring system_prompt for agent {agent_id} - agent already has messages")
             else:
                 # New agent or agent without messages - save the system prompt
-                self._save_system_prompt(agent_id, resolved_system_prompt)
+                self._save_system_prompt(agent_id, resolved_system_prompt, effective_data_dir)
         
         # Copy tools before starting/restarting container
         # Always copy tools for new agents or when tools are specified
         if not agent or tools:
             # Copy global tools first
-            self._copy_global_tools(agent_id)
+            self._copy_global_tools(agent_id, effective_data_dir)
             # Copy per-agent tools (these can override global tools with same names)
-            self._copy_per_agent_tools(agent_id, tools)
+            self._copy_per_agent_tools(agent_id, tools, effective_data_dir)
         
         if agent and agent.container_id:
             # Check if container is still running
@@ -338,18 +367,19 @@ class AgentManager:
                 return await self._start_container(agent, aws_profile=aws_profile, aws_region=aws_region)
         
         # Create new agent
-        return await self._create_agent(agent_id, aws_profile=aws_profile, aws_region=aws_region)
+        return await self._create_agent(agent_id, aws_profile=aws_profile, aws_region=aws_region, data_dir=effective_data_dir)
 
     async def _create_agent(
         self,
         agent_id: str,
         aws_profile: str | None = None,
         aws_region: str | None = None,
+        data_dir: str | None = None,
     ) -> AgentInfo:
         """Create a new agent with Docker container."""
         port = self._get_next_port()
         container_name = f"agent-{agent_id}"
-        agent_dir = self._get_agent_dir(agent_id)
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
         now = datetime.now(timezone.utc).isoformat()
 
         agent = AgentInfo(
@@ -359,6 +389,7 @@ class AgentManager:
             status="starting",
             created_at=now,
             last_activity=now,
+            data_dir=data_dir,
         )
 
         return await self._start_container(agent, aws_profile=aws_profile, aws_region=aws_region)
@@ -370,7 +401,7 @@ class AgentManager:
         aws_region: str | None = None,
     ) -> AgentInfo:
         """Start or restart a container for an agent."""
-        agent_dir = self._get_agent_dir(agent.agent_id)
+        agent_dir = self._get_agent_dir(agent.agent_id, agent.data_dir)
         
         # Remove existing container if any
         try:
@@ -398,7 +429,7 @@ class AgentManager:
             env["AWS_DEFAULT_REGION"] = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
         
         # Check if there's a custom system prompt
-        custom_system_prompt = self._load_system_prompt(agent.agent_id)
+        custom_system_prompt = self._load_system_prompt(agent.agent_id, agent.data_dir)
         if custom_system_prompt:
             env["CUSTOM_SYSTEM_PROMPT"] = "true"
         
@@ -461,10 +492,16 @@ class AgentManager:
         system_prompt: str | None = None,
         system_prompt_file: str | None = None,
         tools: list[str] | None = None,
+        data_dir: str | None = None,
     ) -> dict:
         """Send a message to an agent (fire-and-forget).
         
         Returns immediately after dispatching. Use get_messages to check response.
+        
+        Args:
+            data_dir: Optional custom data directory for this agent. If provided,
+                     agent data will be stored there instead of the default location.
+                     Useful for project-specific agents.
         """
         try:
             agent = await self.get_or_create_agent(
@@ -474,6 +511,7 @@ class AgentManager:
                 system_prompt=system_prompt,
                 system_prompt_file=system_prompt_file,
                 tools=tools,
+                data_dir=data_dir,
             )
         except ValueError as e:
             # Handle system prompt file errors
@@ -541,7 +579,8 @@ class AgentManager:
         # Fallback: read from FileSessionManager storage
         # FileSessionManager stores messages in: session_{agent_id}/agents/agent_default/messages/
         # Each file has structure: {"message": {...}, "message_id": N, ...}
-        messages_dir = AGENTS_DIR / agent_id / f"session_{agent_id}" / "agents" / "agent_default" / "messages"
+        agent_dir = self._get_agent_dir(agent_id, agent.data_dir)
+        messages_dir = agent_dir / f"session_{agent_id}" / "agents" / "agent_default" / "messages"
         if messages_dir.exists():
             try:
                 # Read all message files and sort by index
