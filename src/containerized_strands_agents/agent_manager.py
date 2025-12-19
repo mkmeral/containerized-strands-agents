@@ -587,6 +587,7 @@ class AgentManager:
             "status": "success",
             "agent_id": agent_id,
             "container_id": agent.container_id,
+            "data_dir": agent.data_dir,
             "processing": processing,
         }
 

@@ -170,6 +170,9 @@ send_message = mcp.tool(name="send_message")(_send_message)
 async def get_messages(agent_id: str, count: int = 1, include_tool_messages: bool = False) -> dict:
     """Get the latest messages from an agent's conversation history.
     
+    IMPORTANT: Do not poll this endpoint repeatedly. Use it on-demand when you
+    need to check an agent's response, not in a loop.
+    
     Args:
         agent_id: The agent to get messages from.
         count: Number of messages to retrieve (default: 1, returns last message).
@@ -177,7 +180,7 @@ async def get_messages(agent_id: str, count: int = 1, include_tool_messages: boo
                               Defaults to False to keep responses smaller.
     
     Returns:
-        dict with status and list of messages (role + content).
+        dict with status, messages, agent's data_dir path, and processing state.
     """
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
@@ -190,7 +193,7 @@ async def list_agents() -> dict:
     """List all agents and their current status.
     
     Returns:
-        dict with list of agents including id, status, and last activity.
+        dict with list of agents including id, status, data_dir, and last activity.
     """
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
