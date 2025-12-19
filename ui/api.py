@@ -29,9 +29,9 @@ agent_manager: AgentManager = None
 # Request/Response models
 class SendMessageRequest(BaseModel):
     message: str
-    aws_profile: str = None
-    aws_region: str = None
-    system_prompt: str = None
+    aws_profile: str | None = None
+    aws_region: str | None = None
+    system_prompt: str | None = None
 
 class SendMessageResponse(BaseModel):
     status: str
