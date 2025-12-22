@@ -112,6 +112,7 @@ Run tests locally with Docker available, or skip Docker-dependent tests in CI en
 ## Extensibility Hooks
 
 - **Environment variables**: `CONTAINERIZED_STRANDS_DATA_DIR`, `AGENT_HOST_IDLE_TIMEOUT`, `CONTAINERIZED_AGENTS_GITHUB_TOKEN`
+- **API keys**: `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK` (passed to containers)
 - **Dynamic system prompts**: `CONTAINERIZED_AGENTS_SYSTEM_PROMPTS` for discoverable prompt files
 - **Custom data directories**: Per-agent data storage for project-specific isolation
 - **Tool loading**: `load_tool` function for runtime tool addition within containers

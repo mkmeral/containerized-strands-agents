@@ -33,6 +33,9 @@
 | `AGENT_HOST_IDLE_TIMEOUT` | `720` (12 hrs) | Minutes before idle agents stop |
 | `CONTAINERIZED_AGENTS_GITHUB_TOKEN` | - | GitHub token for git push in containers |
 | `CONTAINERIZED_AGENTS_SYSTEM_PROMPTS` | - | Comma-separated list of prompt files to advertise |
+| `OPENAI_API_KEY` | - | OpenAI API key (passed to containers) |
+| `GOOGLE_API_KEY` | - | Google API key for Gemini (passed to containers) |
+| `AWS_BEARER_TOKEN_BEDROCK` | - | AWS bearer token for Bedrock cross-account access |
 
 ---
 

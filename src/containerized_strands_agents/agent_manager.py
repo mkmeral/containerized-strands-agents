@@ -27,6 +27,14 @@ from containerized_strands_agents.config import (
 
 logger = logging.getLogger(__name__)
 
+# Environment variables to pass through to containers
+PASSTHROUGH_ENV_VARS = [
+    "CONTAINERIZED_AGENTS_GITHUB_TOKEN",  # GitHub token for git push
+    "OPENAI_API_KEY",  # OpenAI API key
+    "GOOGLE_API_KEY",  # Google/Gemini API key
+    "AWS_BEARER_TOKEN_BEDROCK",  # AWS bearer token for Bedrock cross-account
+]
+
 
 class AgentInfo(BaseModel):
     """Information about a managed agent."""
@@ -432,12 +440,13 @@ class AgentManager:
         custom_system_prompt = self._load_system_prompt(agent.agent_id, agent.data_dir)
         if custom_system_prompt:
             env["CUSTOM_SYSTEM_PROMPT"] = "true"
-        
-        # Pass GitHub token if available (for git push access)
-        github_token = os.environ.get("CONTAINERIZED_AGENTS_GITHUB_TOKEN")
-        if github_token:
-            env["CONTAINERIZED_AGENTS_GITHUB_TOKEN"] = github_token
-        
+
+        # Pass through configured environment variables
+        for var_name in PASSTHROUGH_ENV_VARS:
+            value = os.environ.get(var_name)
+            if value:
+                env[var_name] = value
+
         # Build volumes - include AWS credentials directory if it exists
         volumes = {
             str(agent_dir.absolute()): {"bind": "/data", "mode": "rw"},

@@ -68,10 +68,10 @@ def _parse_system_prompts_env() -> list[dict[str, str]]:
 def _build_send_message_docstring() -> str:
     """Build the docstring for send_message with dynamic system prompt list."""
     base_docstring = """Send a message to an agent (fire-and-forget). Creates the agent if it doesn't exist.
-    
+
     This returns immediately after dispatching the message. The agent processes
     the message in the background. Use get_messages to check for the response.
-    
+
     Args:
         agent_id: Unique identifier for the agent. Use descriptive names like 
                   "code-reviewer", "data-analyst", etc.
@@ -90,21 +90,20 @@ def _build_send_message_docstring() -> str:
         data_dir: Custom data directory for this agent. If provided, agent data 
                   (workspace, session, tools) will be stored there instead of the 
                   default location. Useful for project-specific agents."""
-    
+
     # Get available system prompts
     available_prompts = _parse_system_prompts_env()
     if available_prompts:
-        prompt_list = "\n        Available system prompts:\n"
+        prompt_list = "\n    Available system prompts:\n"
         for prompt in available_prompts:
-            prompt_list += f"        - {prompt['name']}: {prompt['path']}\n"
+            prompt_list += f"    - {prompt['name']}: {prompt['path']}\n"
         base_docstring += prompt_list
-    
+
     base_docstring += """
-    
+
     Returns:
-        dict with status ("dispatched", "queued", or "error") and agent_id.
-    """
-    
+        dict with status ("dispatched", "queued", or "error") and agent_id."""
+
     return base_docstring
 
 
@@ -122,16 +121,22 @@ async def lifespan(app):
 
 mcp = FastMCP(
     name="Agent Host",
-    instructions="""
-    This MCP server hosts isolated AI agents in Docker containers.
-    
-    Use send_message to communicate with agents. If an agent doesn't exist,
-    it will be created automatically. Each agent has its own isolated workspace
-    and persists conversation history across restarts.
-    
-    Use get_messages to retrieve conversation history from an agent.
-    Use list_agents to see all available agents and their status.
-    """,
+    instructions="""This MCP server spawns background worker agents in Docker containers.
+
+IMPORTANT: These are autonomous background workers, NOT interactive assistants.
+- send_message dispatches work to an agent and returns immediately
+- Agents work independently in the background (can take minutes to hours)
+- Do NOT poll get_messages waiting for results - agents write output to their workspace
+- Use get_messages only when a human explicitly asks to check on an agent's progress
+
+Typical workflow:
+1. Use send_message to assign a task to an agent
+2. Move on to other work - the agent runs autonomously  
+3. Check results later via get_messages only if explicitly asked by the user
+
+Use list_agents to see all agents and their status.
+Use stop_agent to terminate an agent's container.
+""",
 )
 
 
@@ -169,16 +174,16 @@ send_message = mcp.tool(name="send_message")(_send_message)
 @mcp.tool
 async def get_messages(agent_id: str, count: int = 1, include_tool_messages: bool = False) -> dict:
     """Get the latest messages from an agent's conversation history.
-    
+
     IMPORTANT: Do not poll this endpoint repeatedly. Use it on-demand when you
     need to check an agent's response, not in a loop.
-    
+
     Args:
         agent_id: The agent to get messages from.
         count: Number of messages to retrieve (default: 1, returns last message).
         include_tool_messages: If True, include tool_use and tool_result messages.
                               Defaults to False to keep responses smaller.
-    
+
     Returns:
         dict with status, messages, agent's data_dir path, and processing state.
     """

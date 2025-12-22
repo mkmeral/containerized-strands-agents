@@ -50,6 +50,11 @@ DATA_DIR = Path("/data")
 WORKSPACE_DIR = DATA_DIR / "workspace"
 CUSTOM_SYSTEM_PROMPT_FILE = DATA_DIR / "system_prompt.txt"
 
+# Retry configuration
+MAX_RETRIES = 3
+INITIAL_RETRY_DELAY_SECONDS = 60  # Start with 1 minute
+RETRY_BACKOFF_MULTIPLIER = 2  # Double delay each retry
+
 # System prompt for the agent - load custom if available
 def load_system_prompt() -> str:
     """Load system prompt, preferring custom if available."""
@@ -221,13 +226,42 @@ def get_agent() -> Agent:
                 summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed
                 preserve_recent_messages=10,  # Always keep 10 most recent messages
             ),
+            model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         )
         logger.info(f"Agent initialized with SummarizingConversationManager")
-        
+
         # Load dynamic tools from /app/tools/ directory
         load_dynamic_tools(_agent)
-    
+
     return _agent
+
+
+async def invoke_agent_with_retry(agent: Agent, message: str) -> str:
+    """Invoke agent with retry logic for transient errors."""
+    loop = asyncio.get_event_loop()
+    last_error = None
+    delay = INITIAL_RETRY_DELAY_SECONDS
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            result = await loop.run_in_executor(None, agent, message)
+            return str(result)
+        except Exception as e:
+            last_error = e
+
+            if attempt < MAX_RETRIES:
+                logger.warning(
+                    f"Error on attempt {attempt + 1}/{MAX_RETRIES + 1}, "
+                    f"retrying in {delay} seconds: {e}"
+                )
+                await asyncio.sleep(delay)
+                delay *= RETRY_BACKOFF_MULTIPLIER
+            else:
+                logger.error(f"Max retries exceeded: {e}")
+                raise
+
+    # Should not reach here, but just in case
+    raise last_error
 
 
 @app.on_event("startup")
@@ -267,13 +301,10 @@ async def chat(request: ChatRequest):
         _is_processing = True
         agent = get_agent()
         
-        # Run agent in thread pool to not block
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, agent, request.message)
+        # Run agent with retry logic for throttling
+        response_text = await invoke_agent_with_retry(agent, request.message)
         
         # Session manager handles persistence automatically
-        
-        response_text = str(result)
         
         return ChatResponse(
             status="success",

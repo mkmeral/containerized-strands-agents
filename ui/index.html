@@ -761,6 +761,9 @@
         function renderMessages(messages) {
             const messagesArea = document.getElementById('messages-area');
             
+            // Check if user is near bottom before re-rendering (within 100px)
+            const wasNearBottom = messagesArea.scrollHeight - messagesArea.scrollTop - messagesArea.clientHeight < 100;
+            
             if (messages.length === 0) {
                 messagesArea.innerHTML = '<div class="loading">No messages yet. Send a message to start the conversation.</div>';
                 return;
@@ -848,8 +851,10 @@
                 }
             }).join('');
             
-            // Auto-scroll to bottom
-            messagesArea.scrollTop = messagesArea.scrollHeight;
+            // Only auto-scroll if user was already near the bottom
+            if (wasNearBottom) {
+                messagesArea.scrollTop = messagesArea.scrollHeight;
+            }
         }
         
         // Format tool input for display
