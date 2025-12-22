@@ -4,14 +4,14 @@ An MCP server that hosts isolated Strands AI agents in Docker containers. Each a
 
 ## Features
 
-- **Async/Non-blocking**: `send_message` returns immediately (fire-and-forget), use `get_messages` to poll for responses
+- **Async/Non-blocking**: `send_message` returns immediately (fire-and-forget)
 - **Isolated Agents**: Each agent runs in its own Docker container
-- **Session Persistence**: Conversation history is saved and restored across container restarts
+- **Session Persistence**: Conversation history saved and restored across container restarts
 - **Custom System Prompts**: Configure per-agent system prompts via text or file
 - **GitHub Integration**: Agents can push to repositories with scoped access tokens
 - **AWS Profile Support**: Pass different AWS profiles for different agents
-- **Idle Timeout**: Containers automatically stop after 30 minutes of inactivity
-- **Full Toolset**: Agents have access to file operations, shell, Python REPL, and more
+- **Retry Logic**: Automatic retry with exponential backoff for transient errors
+- **Idle Timeout**: Containers automatically stop after configurable inactivity period
 
 ## Prerequisites
 
@@ -28,9 +28,6 @@ pip install -e .
 # With web UI support
 pip install -e ".[webui]"
 
-# With development tools
-pip install -e ".[dev]"
-
 # All features
 pip install -e ".[webui,dev]"
 ```
@@ -41,19 +38,13 @@ The Docker image will be built automatically on first use.
 
 ### Web UI
 
-Launch the web interface for easy agent management:
-
 ```bash
 containerized-strands-agents-webui
 # or
 python run_web_ui.py
 ```
 
-Then open http://localhost:8000 in your browser to:
-- View all agents with real-time status updates
-- Chat with agents through a clean interface
-- Create new agents with custom system prompts
-- Stop agents on demand
+Open http://localhost:8000 to view agents, chat, and manage containers.
 
 ### As an MCP Server
 
@@ -65,8 +56,7 @@ Add to your MCP configuration (e.g., `~/.kiro/settings/mcp.json`):
     "containerized-strands-agents": {
       "command": "containerized-strands-agents",
       "env": {
-        "CONTAINERIZED_AGENTS_GITHUB_TOKEN": "github_pat_xxxx",
-        "CONTAINERIZED_AGENTS_SYSTEM_PROMPTS": "/path/to/prompt1.txt,/path/to/prompt2.txt"
+        "CONTAINERIZED_AGENTS_GITHUB_TOKEN": "github_pat_xxxx"
       }
     }
   }
@@ -75,50 +65,26 @@ Add to your MCP configuration (e.g., `~/.kiro/settings/mcp.json`):
 
 ### MCP Tools
 
-#### send_message
+| Tool | Description |
+|------|-------------|
+| `send_message` | Send message to agent (fire-and-forget), creates agent if needed |
+| `get_messages` | Get conversation history (use on-demand, not for polling) |
+| `list_agents` | List all agents and their status |
+| `stop_agent` | Stop an agent's container |
 
-Send a message to an agent (fire-and-forget). Creates the agent if it doesn't exist.
+#### send_message
 
 ```python
 send_message(
-    agent_id="my-agent",                    # Unique agent identifier
-    message="Hello, agent!",                # Message to send
-    aws_profile="my-profile",               # Optional: AWS profile
-    aws_region="us-west-2",                 # Optional: AWS region (default: us-east-1)
-    system_prompt="You are a pirate...",    # Optional: Custom system prompt
-    system_prompt_file="/path/to/prompt",   # Optional: Load prompt from file (takes precedence)
+    agent_id="my-agent",
+    message="Hello!",
+    aws_profile="my-profile",               # Optional
+    aws_region="us-west-2",                 # Optional (default: us-east-1)
+    system_prompt="You are a pirate...",    # Optional
+    system_prompt_file="/path/to/prompt",   # Optional (takes precedence)
+    tools=["/path/to/tool.py"],             # Optional: per-agent tools
+    data_dir="/path/to/project",            # Optional: custom data directory
 )
-# Returns: {"status": "dispatched", "agent_id": "my-agent", "message": "..."}
-```
-
-#### get_messages
-
-Get conversation history from an agent. Use this to check for responses after `send_message`.
-
-```python
-get_messages(
-    agent_id="my-agent",  # Agent to get messages from
-    count=5,              # Number of messages to retrieve (default: 1)
-)
-# Returns: {"status": "success", "messages": [...], "processing": true/false}
-```
-
-#### list_agents
-
-List all agents and their status.
-
-```python
-list_agents()
-# Returns: {"status": "success", "agents": [{"agent_id": "...", "status": "running", "processing": false, ...}]}
-```
-
-#### stop_agent
-
-Stop an agent's container immediately.
-
-```python
-stop_agent(agent_id="my-agent")
-# Returns: {"status": "success", "message": "Agent my-agent has been stopped successfully"}
 ```
 
 ## Configuration
@@ -128,78 +94,55 @@ stop_agent(agent_id="my-agent")
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CONTAINERIZED_STRANDS_DATA_DIR` | `./data` | Base directory for persistence |
-| `AGENT_HOST_IDLE_TIMEOUT` | `30` | Minutes before idle container stops |
-| `CONTAINERIZED_AGENTS_GITHUB_TOKEN` | - | GitHub PAT for git push access (scoped to specific repos) |
-| `CONTAINERIZED_AGENTS_SYSTEM_PROMPTS` | - | Comma-separated paths to system prompt files (shown in tool description) |
+| `AGENT_HOST_IDLE_TIMEOUT` | `720` | Minutes before idle container stops (12 hrs) |
+| `CONTAINERIZED_AGENTS_GITHUB_TOKEN` | - | GitHub PAT for git push access |
+| `CONTAINERIZED_AGENTS_SYSTEM_PROMPTS` | - | Comma-separated paths to prompt files |
+| `OPENAI_API_KEY` | - | OpenAI API key (passed to containers) |
+| `GOOGLE_API_KEY` | - | Google/Gemini API key (passed to containers) |
+| `AWS_BEARER_TOKEN_BEDROCK` | - | AWS bearer token for Bedrock cross-account |
 
 ### GitHub Token Setup
 
-To enable agents to push to GitHub:
-
 1. Create a [Fine-Grained Personal Access Token](https://github.com/settings/tokens?type=beta)
-2. Select "Only select repositories" and choose your sandbox/test repos
+2. Select "Only select repositories" and choose your repos
 3. Grant "Contents: Read and write" permission
-4. Set the token:
-
-```bash
-export CONTAINERIZED_AGENTS_GITHUB_TOKEN="github_pat_xxxx"
-containerized-strands-agents
-```
-
-Agents will be able to `git push` only to repositories the token has access to.
-
-### Dynamic System Prompt List
-
-Pre-configure system prompts that appear in the tool description:
-
-```bash
-export CONTAINERIZED_AGENTS_SYSTEM_PROMPTS="/path/to/code_reviewer.txt,/path/to/data_analyst.txt"
-```
-
-If a prompt file starts with `# Display Name`, that name will be shown in the tool description. Otherwise, the filename is used.
-
-See [DYNAMIC_PROMPT_LIST_FEATURE.md](DYNAMIC_PROMPT_LIST_FEATURE.md) for details.
+4. Set `CONTAINERIZED_AGENTS_GITHUB_TOKEN`
 
 ## Agent Capabilities
 
-Each agent has access to these tools:
+Each agent has access to:
 
-- `file_read` - Read files from workspace
-- `file_write` - Write files to workspace
-- `editor` - Edit files with precision
+- `file_read`, `file_write`, `editor` - File operations
 - `shell` - Execute shell commands
 - `python_repl` - Run Python code
 - `use_agent` - Spawn sub-agents
 - `load_tool` - Dynamically load additional tools
+- GitHub tools - Create/update issues and PRs
 
-**Important**: Agents should always work in `/data/workspace` - this directory is mounted from the host and persists across container restarts.
+**Important**: Agents work in `/data/workspace` - this directory persists across container restarts.
 
 ## Data Persistence
-
-All data is stored in the `data/` directory:
 
 ```
 data/
 ├── tasks.json              # Agent registry
 └── agents/{agent_id}/
-    ├── session.json        # Conversation history
-    ├── system_prompt.txt   # Custom system prompt (if set)
-    └── workspace/          # Agent's isolated files
+    ├── session_{id}/       # Conversation history
+    ├── system_prompt.txt   # Custom system prompt
+    ├── tools/              # Per-agent tools
+    └── workspace/          # Agent's files
 ```
 
 ## Development
 
 ```bash
-# Install dev dependencies
 pip install -e ".[dev]"
-
-# Run tests
 python -m pytest tests/ -v
 
 # Rebuild Docker image after changes
-docker build -t agent-host-runner docker/
+./scripts/build_docker.sh
 ```
 
-## Architecture
+## License
 
-See [DESIGN.md](DESIGN.md) for detailed architecture documentation.
+MIT
