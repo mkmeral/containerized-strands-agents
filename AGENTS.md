@@ -32,7 +32,9 @@ pip install -e ".[webui]"
 # Build Docker image (auto-built on first use, or manually)
 ./scripts/build_docker.sh
 
-# Run MCP server
+# Run MCP server (for use with Kiro, Claude Desktop, etc.)
+containerized-strands-agents-server
+# or
 python -m containerized_strands_agents.server
 
 # Run web UI (finds free port 8000-8100)
