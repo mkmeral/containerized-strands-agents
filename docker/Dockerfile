@@ -13,14 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt /app/
+COPY docker/requirements.txt /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy containerized_strands_agents module
 COPY src/containerized_strands_agents /app/containerized_strands_agents
 
 # Copy agent code
-COPY *.py /app/
+COPY docker/*.py /app/
 
 # Create tools directory for dynamic tool loading
 RUN mkdir -p /app/tools

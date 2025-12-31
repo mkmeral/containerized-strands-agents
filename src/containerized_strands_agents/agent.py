@@ -18,20 +18,30 @@ from strands_tools import (
     python_repl,
     load_tool,
 )
-from github_tools import (
-    create_issue,
-    get_issue,
-    update_issue,
-    list_issues,
-    get_issue_comments,
-    add_issue_comment,
-    create_pull_request,
-    get_pull_request,
-    update_pull_request,
-    list_pull_requests,
-    get_pr_review_and_comments,
-    reply_to_review_comment,
-)
+
+# GitHub tools are only available in Docker container
+try:
+    from github_tools import (
+        create_issue,
+        get_issue,
+        update_issue,
+        list_issues,
+        get_issue_comments,
+        add_issue_comment,
+        create_pull_request,
+        get_pull_request,
+        update_pull_request,
+        list_pull_requests,
+        get_pr_review_and_comments,
+        reply_to_review_comment,
+    )
+    GITHUB_TOOLS = [
+        create_issue, get_issue, update_issue, list_issues, get_issue_comments, add_issue_comment,
+        create_pull_request, get_pull_request, update_pull_request, list_pull_requests,
+        get_pr_review_and_comments, reply_to_review_comment,
+    ]
+except ImportError:
+    GITHUB_TOOLS = []
 
 logger = logging.getLogger(__name__)
 
@@ -180,14 +190,10 @@ def create_agent(
     )
     
     # Create agent with session manager and summarizing conversation manager
+    base_tools = [file_read, file_write, editor, shell, use_agent, python_repl, load_tool]
     agent = Agent(
         system_prompt=prompt,
-        tools=[
-            file_read, file_write, editor, shell, use_agent, python_repl, load_tool,
-            create_issue, get_issue, update_issue, list_issues, get_issue_comments, add_issue_comment,
-            create_pull_request, get_pull_request, update_pull_request, list_pull_requests,
-            get_pr_review_and_comments, reply_to_review_comment,
-        ],
+        tools=base_tools + GITHUB_TOOLS,
         session_manager=session_manager,
         conversation_manager=SummarizingConversationManager(
             summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed
