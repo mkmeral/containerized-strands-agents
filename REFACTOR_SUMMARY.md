@@ -1,11 +1,11 @@
 # CLI Run Command Refactor Summary
 
 **Branch:** `feature/cli-run`  
-**Commit:** `6fa8082`
+**Commits:** `6fa8082`, `7441234`, `8acbee5`
 
 ## Objective
 
-Refactor to share agent logic between Docker runner and CLI, and add a `run` command to the CLI for direct agent execution.
+Refactor to share agent logic between Docker runner and CLI, and add a `run` command to the CLI for direct agent execution. Ensure snapshots are portable for standalone execution (e.g., GitHub Actions).
 
 ## Changes Made
 
@@ -41,7 +41,14 @@ New module containing shared agent logic:
 - Complex `Agent()` initialization code
 
 **Added:**
-- Import from `containerized_strands_agents.agent`
+- Fallback import logic for portability:
+  ```python
+  try:
+      from containerized_strands_agents.agent import create_agent, run_agent
+  except ImportError:
+      from agent import create_agent, run_agent
+  ```
+- This enables both Docker (package installed) and standalone (local file) execution
 - Simplified `get_agent()` using `create_agent()`
 - Updated `_process_request()` to use `run_agent()`
 
@@ -83,6 +90,22 @@ containerized-strands-agents run \
 - Supports optional custom system prompt
 - Sets BYPASS_TOOL_CONSENT for non-interactive operation
 
+### 5. Updated `src/containerized_strands_agents/agent_manager.py`
+
+**Enhanced `_copy_runner_files()` method:**
+- Now copies `src/containerized_strands_agents/agent.py` to `.agent/runner/`
+- This makes snapshots portable - they can run standalone without the package
+- Enables GitHub Actions workflows and other standalone environments
+- Agent snapshots are now self-contained
+
+**How it works:**
+1. When agent is created, `agent_manager.py` copies:
+   - All `docker/*.py` files to `.agent/runner/`
+   - The shared `agent.py` module to `.agent/runner/`
+2. In Docker: `agent_runner.py` imports from package
+3. Standalone: `agent_runner.py` falls back to local `agent.py`
+4. Snapshots work in both environments seamlessly
+
 ## Statistics
 
 - **Lines added:** 305
@@ -97,6 +120,8 @@ containerized-strands-agents run \
 ✅ **Flexible paths** - Works with both Docker (`/data`) and local directories  
 ✅ **CLI functionality** - Can now run agents directly without Docker  
 ✅ **Consistent behavior** - Same agent configuration in both contexts  
+✅ **Portable snapshots** - Snapshots work standalone without package installation  
+✅ **GitHub Actions ready** - Snapshots can run in CI/CD environments  
 
 ## Testing
 
