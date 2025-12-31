@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
+# Copy containerized_strands_agents module
+COPY src/containerized_strands_agents /app/containerized_strands_agents
+
 # Copy agent code
 COPY *.py /app/
 

@@ -1,7 +1,6 @@
 """Agent Runner - FastAPI server running inside Docker container with Strands Agent."""
 
 import asyncio
-import json
 import logging
 import os
 import signal
@@ -16,31 +15,12 @@ from pydantic import BaseModel
 import uvicorn
 
 from strands import Agent
-from strands.agent.conversation_manager import SummarizingConversationManager
-from strands.session.file_session_manager import FileSessionManager
-from strands_tools import (
-    file_read,
-    file_write,
-    editor,
-    shell,
-    use_agent,
-    python_repl,
-    load_tool,
-)
-from github_tools import (
-    create_issue,
-    get_issue,
-    update_issue,
-    list_issues,
-    get_issue_comments,
-    add_issue_comment,
-    create_pull_request,
-    get_pull_request,
-    update_pull_request,
-    list_pull_requests,
-    get_pr_review_and_comments,
-    reply_to_review_comment,
-)
+
+# Try importing from package first (Docker), fall back to local (standalone snapshot)
+try:
+    from containerized_strands_agents.agent import create_agent, run_agent
+except ImportError:
+    from agent import create_agent, run_agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,71 +31,12 @@ logger = logging.getLogger(__name__)
 AGENT_ID = "agent"
 IDLE_TIMEOUT_MINUTES = int(os.getenv("IDLE_TIMEOUT_MINUTES", "30"))
 DATA_DIR = Path("/data")
-WORKSPACE_DIR = DATA_DIR / "workspace"
-CUSTOM_SYSTEM_PROMPT_FILE = DATA_DIR / ".agent" / "system_prompt.txt"
+TOOLS_DIR = Path("/app/tools")
 
 # Retry configuration
 MAX_RETRIES = 3
 INITIAL_RETRY_DELAY_SECONDS = 60  # Start with 1 minute
 RETRY_BACKOFF_MULTIPLIER = 2  # Double delay each retry
-
-
-def get_env_capabilities() -> str:
-    """Get available capabilities from environment metadata."""
-    metadata_str = os.getenv("AGENT_ENV_METADATA", "{}")
-    try:
-        metadata = json.loads(metadata_str)
-        caps = [v["capability"] for v in metadata.values() if v.get("available")]
-        return "\n".join(f"- {c}" for c in caps) if caps else ""
-    except Exception:
-        return ""
-
-
-# System prompt for the agent - load custom if available
-def load_system_prompt() -> str:
-    """Load system prompt, preferring custom if available."""
-    if os.getenv("CUSTOM_SYSTEM_PROMPT") == "true" and CUSTOM_SYSTEM_PROMPT_FILE.exists():
-        try:
-            base_prompt = CUSTOM_SYSTEM_PROMPT_FILE.read_text()
-            logger.info("Using custom system prompt")
-        except Exception as e:
-            logger.error(f"Failed to load custom system prompt: {e}")
-            logger.info("Falling back to default system prompt")
-            base_prompt = None
-    else:
-        base_prompt = None
-    
-    if not base_prompt:
-        base_prompt = """You are a helpful AI assistant running in an isolated Docker container.
-
-IMPORTANT: Your persistent workspace is /data/workspace. ALWAYS work in this directory.
-- Clone repos here: cd /data/workspace && git clone ...
-- Create files here: /data/workspace/myproject/...
-- This directory is mounted from the host and persists across container restarts.
-- Do NOT use /tmp or other directories - they will be lost when the container stops.
-
-Available tools:
-- file_read, file_write, editor: File operations (use paths relative to /data/workspace)
-- shell: Execute shell commands (always cd to /data/workspace first)
-- python_repl: Run Python code
-- use_agent: Spawn sub-agents for complex tasks
-- load_tool: Dynamically load additional tools
-
-When given a task:
-1. Work in /data/workspace
-2. Be thorough but concise
-3. Test your work before committing
-4. Commit with clear messages
-"""
-    
-    # Append environment capabilities if any
-    capabilities = get_env_capabilities()
-    if capabilities:
-        base_prompt += f"\n\nEnvironment capabilities:\n{capabilities}"
-    
-    return base_prompt
-
-SYSTEM_PROMPT = load_system_prompt()
 
 # Bypass tool consent for automated operation
 os.environ["BYPASS_TOOL_CONSENT"] = "true"
@@ -192,10 +113,6 @@ class IdleShutdownTimer:
 
 # Initialize components
 app = FastAPI(title=f"Agent {AGENT_ID}")
-session_manager = FileSessionManager(
-    session_id=AGENT_ID,
-    storage_dir="/data/.agent/session"
-)
 idle_timer = IdleShutdownTimer(IDLE_TIMEOUT_MINUTES)
 
 # Initialize agent (lazy loading)
@@ -223,7 +140,10 @@ async def _process_request(message: str) -> dict:
     try:
         _is_processing = True
         agent = get_agent()
-        response_text = await invoke_agent_with_retry(agent, message)
+        
+        # Run agent synchronously and get response
+        loop = asyncio.get_event_loop()
+        response_text = await loop.run_in_executor(None, run_agent, agent, message)
         
         return {
             "status": "success",
@@ -272,89 +192,18 @@ async def _queue_processor():
             logger.error(f"Queue processor error: {e}")
 
 
-def load_dynamic_tools(agent: Agent):
-    """Load tools dynamically from /app/tools/ directory."""
-    tools_dir = Path("/app/tools")
-    if not tools_dir.exists():
-        logger.info("No /app/tools directory found, skipping dynamic tool loading")
-        return
-    
-    # Find all .py files in the tools directory
-    tool_files = list(tools_dir.glob("*.py"))
-    if not tool_files:
-        logger.info("No .py files found in /app/tools directory")
-        return
-    
-    logger.info(f"Loading {len(tool_files)} dynamic tools from /app/tools/")
-    
-    for tool_file in tool_files:
-        try:
-            # Extract tool name from filename (without .py extension)
-            tool_name = tool_file.stem
-            
-            # Use the load_tool function to dynamically load the tool
-            agent.tool.load_tool(path=str(tool_file), name=tool_name)
-            logger.info(f"Successfully loaded dynamic tool: {tool_name}")
-        except Exception as e:
-            logger.error(f"Failed to load tool {tool_file}: {e}")
-
-
 def get_agent() -> Agent:
     """Get or create the Strands agent."""
     global _agent
     if _agent is None:
-        # Create agent with session manager and summarizing conversation manager
-        # SummarizingConversationManager intelligently summarizes older messages
-        # instead of just dropping them, preserving important context
-        _agent = Agent(
-            system_prompt=SYSTEM_PROMPT,
-            tools=[
-                file_read, file_write, editor, shell, use_agent, python_repl, load_tool,
-                create_issue, get_issue, update_issue, list_issues, get_issue_comments, add_issue_comment,
-                create_pull_request, get_pull_request, update_pull_request, list_pull_requests,
-                get_pr_review_and_comments, reply_to_review_comment,
-            ],
-            session_manager=session_manager,
-            conversation_manager=SummarizingConversationManager(
-                summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed
-                preserve_recent_messages=10,  # Always keep 10 most recent messages
-            ),
-            model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        # Create agent using shared logic
+        _agent = create_agent(
+            data_dir=DATA_DIR,
+            tools_dir=TOOLS_DIR if TOOLS_DIR.exists() else None,
+            agent_id=AGENT_ID,
         )
-        logger.info(f"Agent initialized with SummarizingConversationManager")
-
-        # Load dynamic tools from /app/tools/ directory
-        load_dynamic_tools(_agent)
-
+        logger.info(f"Agent initialized")
     return _agent
-
-
-async def invoke_agent_with_retry(agent: Agent, message: str) -> str:
-    """Invoke agent with retry logic for transient errors."""
-    loop = asyncio.get_event_loop()
-    last_error = None
-    delay = INITIAL_RETRY_DELAY_SECONDS
-
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            result = await loop.run_in_executor(None, agent, message)
-            return str(result)
-        except Exception as e:
-            last_error = e
-
-            if attempt < MAX_RETRIES:
-                logger.warning(
-                    f"Error on attempt {attempt + 1}/{MAX_RETRIES + 1}, "
-                    f"retrying in {delay} seconds: {e}"
-                )
-                await asyncio.sleep(delay)
-                delay *= RETRY_BACKOFF_MULTIPLIER
-            else:
-                logger.error(f"Max retries exceeded: {e}")
-                raise
-
-    # Should not reach here, but just in case
-    raise last_error
 
 
 @app.on_event("startup")
@@ -362,7 +211,10 @@ async def startup():
     """Start idle timer and request queue on startup."""
     global _request_queue, _queue_processor_task
     
-    WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    # Ensure workspace directory exists
+    workspace_dir = DATA_DIR / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    
     configure_git()
     
     # Initialize request queue and processor
