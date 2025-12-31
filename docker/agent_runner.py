@@ -46,7 +46,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration from environment
-AGENT_ID = os.getenv("AGENT_ID", "default")
+# Hardcoded agent ID for portable snapshots - session path is always the same
+# regardless of what agent_id the MCP caller uses
+AGENT_ID = "agent"
 IDLE_TIMEOUT_MINUTES = int(os.getenv("IDLE_TIMEOUT_MINUTES", "30"))
 DATA_DIR = Path("/data")
 WORKSPACE_DIR = DATA_DIR / "workspace"
