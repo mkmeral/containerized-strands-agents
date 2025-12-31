@@ -208,14 +208,13 @@ class TestSystemPromptFile:
         mock_container.id = "container789"
         mock_docker.containers.run.return_value = mock_container
         
-        # Mock wait for ready and processing
+        # Mock wait for ready
         with patch.object(manager, '_wait_for_container_ready', return_value=True):
-            with patch.object(manager, '_process_message', return_value=None) as mock_process:
-                result = await manager.send_message(
-                    agent_id,
-                    message,
-                    system_prompt_file=str(prompt_file)
-                )
+            result = await manager.send_message(
+                agent_id,
+                message,
+                system_prompt_file=str(prompt_file)
+            )
         
         # Check message was dispatched successfully
         assert result["status"] == "dispatched"
@@ -224,9 +223,6 @@ class TestSystemPromptFile:
         # Check system prompt was saved from file
         loaded_prompt = manager._load_system_prompt(agent_id)
         assert loaded_prompt == prompt_content.strip()
-        
-        # Check processing was started
-        mock_process.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_send_message_file_error_returns_error_response(self, manager, mock_docker):
@@ -262,15 +258,14 @@ class TestSystemPromptFile:
         mock_container.id = "precedence123"
         mock_docker.containers.run.return_value = mock_container
         
-        # Mock wait for ready and processing
+        # Mock wait for ready
         with patch.object(manager, '_wait_for_container_ready', return_value=True):
-            with patch.object(manager, '_process_message', return_value=None):
-                result = await manager.send_message(
-                    agent_id,
-                    message,
-                    system_prompt=text_content,  # Should be ignored
-                    system_prompt_file=str(prompt_file)  # Should take precedence
-                )
+            result = await manager.send_message(
+                agent_id,
+                message,
+                system_prompt=text_content,  # Should be ignored
+                system_prompt_file=str(prompt_file)  # Should take precedence
+            )
         
         # Check success
         assert result["status"] == "dispatched"
@@ -287,17 +282,17 @@ class TestSystemPromptFile:
         original_prompt = "Original assistant"
         new_file_content = "New file assistant"
         
-        # Create agent directory and save original system prompt
+        # Create agent directory structure with .agent/ subdirectory
         agent_dir = tmp_path / "agents" / agent_id
         agent_dir.mkdir(parents=True)
-        (agent_dir / "system_prompt.txt").write_text(original_prompt)
+        (agent_dir / ".agent").mkdir(parents=True)
+        (agent_dir / ".agent" / "system_prompt.txt").write_text(original_prompt)
         
-        # Create session file with messages
-        session_data = {
-            "agent_id": agent_id,
-            "messages": [{"role": "user", "content": "Previous message"}]
-        }
-        (agent_dir / "session.json").write_text(json.dumps(session_data))
+        # Create FileSessionManager-style message files
+        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        messages_dir.mkdir(parents=True)
+        msg = {"message": {"role": "user", "content": "Previous message"}, "message_id": 0}
+        (messages_dir / "message_0.json").write_text(json.dumps(msg))
         
         # Create new prompt file
         new_prompt_file = tmp_path / "new_prompt.txt"

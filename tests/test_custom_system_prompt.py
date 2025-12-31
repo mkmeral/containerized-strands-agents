@@ -53,8 +53,8 @@ class TestCustomSystemPrompt:
         # Save custom system prompt
         manager._save_system_prompt(agent_id, custom_prompt)
         
-        # Check file was created
-        prompt_file = tmp_path / "agents" / agent_id / "system_prompt.txt"
+        # Check file was created in .agent/ subdirectory
+        prompt_file = tmp_path / "agents" / agent_id / ".agent" / "system_prompt.txt"
         assert prompt_file.exists()
         assert prompt_file.read_text() == custom_prompt
         
@@ -79,33 +79,28 @@ class TestCustomSystemPrompt:
         agent_dir = tmp_path / "agents" / agent_id
         agent_dir.mkdir(parents=True)
         
-        # Create session file with messages
-        session_data = {
-            "agent_id": agent_id,
-            "messages": [
-                {"role": "user", "content": "Hello"},
-                {"role": "assistant", "content": "Hi there!"}
-            ]
-        }
-        session_file = agent_dir / "session.json"
-        session_file.write_text(json.dumps(session_data))
+        # Create FileSessionManager-style message files in .agent/session/
+        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        messages_dir.mkdir(parents=True)
+        
+        # Create message files
+        msg1 = {"message": {"role": "user", "content": "Hello"}, "message_id": 0}
+        msg2 = {"message": {"role": "assistant", "content": "Hi there!"}, "message_id": 1}
+        (messages_dir / "message_0.json").write_text(json.dumps(msg1))
+        (messages_dir / "message_1.json").write_text(json.dumps(msg2))
         
         result = manager._has_existing_session(agent_id)
         assert result == True
 
     def test_has_existing_session_empty_messages(self, manager, tmp_path):
-        """Test checking for existing session with empty messages."""
+        """Test checking for existing session with empty messages directory."""
         agent_id = "test-agent"
         agent_dir = tmp_path / "agents" / agent_id
         agent_dir.mkdir(parents=True)
         
-        # Create session file with empty messages
-        session_data = {
-            "agent_id": agent_id,
-            "messages": []
-        }
-        session_file = agent_dir / "session.json"
-        session_file.write_text(json.dumps(session_data))
+        # Create empty messages directory (no message files)
+        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        messages_dir.mkdir(parents=True)
         
         result = manager._has_existing_session(agent_id)
         assert result == False
@@ -143,17 +138,17 @@ class TestCustomSystemPrompt:
         original_prompt = "You are a helper."
         new_prompt = "You are a different helper."
         
-        # Create agent directory and save original system prompt
+        # Create agent directory structure
         agent_dir = tmp_path / "agents" / agent_id
         agent_dir.mkdir(parents=True)
-        (agent_dir / "system_prompt.txt").write_text(original_prompt)
+        (agent_dir / ".agent").mkdir(parents=True)
+        (agent_dir / ".agent" / "system_prompt.txt").write_text(original_prompt)
         
-        # Create session file with messages
-        session_data = {
-            "agent_id": agent_id,
-            "messages": [{"role": "user", "content": "Hello"}]
-        }
-        (agent_dir / "session.json").write_text(json.dumps(session_data))
+        # Create FileSessionManager-style message files
+        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        messages_dir.mkdir(parents=True)
+        msg = {"message": {"role": "user", "content": "Hello"}, "message_id": 0}
+        (messages_dir / "message_0.json").write_text(json.dumps(msg))
         
         # Mock existing agent
         from containerized_strands_agents.agent_manager import AgentInfo
@@ -191,14 +186,13 @@ class TestCustomSystemPrompt:
         mock_container.id = "container456"
         mock_docker.containers.run.return_value = mock_container
         
-        # Mock wait for ready and processing
+        # Mock wait for ready
         with patch.object(manager, '_wait_for_container_ready', return_value=True):
-            with patch.object(manager, '_process_message', return_value=None) as mock_process:
-                result = await manager.send_message(
-                    agent_id,
-                    message,
-                    system_prompt=custom_prompt
-                )
+            result = await manager.send_message(
+                agent_id,
+                message,
+                system_prompt=custom_prompt
+            )
         
         # Check message was dispatched
         assert result["status"] == "dispatched"
@@ -207,9 +201,6 @@ class TestCustomSystemPrompt:
         # Check system prompt was saved
         loaded_prompt = manager._load_system_prompt(agent_id)
         assert loaded_prompt == custom_prompt
-        
-        # Check processing was started
-        mock_process.assert_called_once()
 
     @pytest.mark.asyncio
     @pytest.mark.asyncio

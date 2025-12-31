@@ -195,13 +195,19 @@ class TestDockerIntegration:
                 )
                 assert resp.status_code == 200
                 
-                # Check session file exists
-                session_file = agent_dir / "session.json"
-                assert session_file.exists(), "Session file should be created"
+                # Check session files exist in new .agent/session/ location
+                # FileSessionManager stores messages in: .agent/session/agents/agent_default/messages/
+                messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
                 
-                session_data = json.loads(session_file.read_text())
-                assert "messages" in session_data
-                assert len(session_data["messages"]) > 0
+                # Wait a bit for files to be written
+                for _ in range(10):
+                    if messages_dir.exists() and list(messages_dir.glob("message_*.json")):
+                        break
+                    await asyncio.sleep(0.5)
+                
+                assert messages_dir.exists(), "Session messages directory should be created"
+                message_files = list(messages_dir.glob("message_*.json"))
+                assert len(message_files) > 0, "Session should have message files"
                 
         finally:
             if container:

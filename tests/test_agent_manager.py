@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+# Import json for test_has_existing_session_with_messages
+
 from containerized_strands_agents.agent_manager import AgentManager, TaskTracker, AgentInfo
 
 
@@ -96,9 +98,10 @@ class TestAgentManager:
         port2 = manager._get_next_port()
         assert port2 > port1
 
-    def test_list_agents_empty(self, manager):
+    @pytest.mark.asyncio
+    async def test_list_agents_empty(self, manager):
         """Test listing agents when none exist."""
-        agents = manager.list_agents()
+        agents = await manager.list_agents()
         assert agents == []
 
     @pytest.mark.asyncio
@@ -107,51 +110,56 @@ class TestAgentManager:
         result = await manager.get_messages("nonexistent")
         assert result["status"] == "error"
 
-    def test_extract_text_content_string(self, manager):
-        """Test extracting text from string content."""
-        result = manager._extract_text_content("hello")
-        assert result == "hello"
+    def test_get_agent_dir_creates_structure(self, manager, tmp_path):
+        """Test that _get_agent_dir creates the proper directory structure."""
+        agent_id = "test-agent"
+        agent_dir = manager._get_agent_dir(agent_id)
+        
+        # Check directories were created
+        assert agent_dir.exists()
+        assert (agent_dir / "workspace").exists()
+        assert (agent_dir / ".agent").exists()
+        assert (agent_dir / ".agent" / "tools").exists()
+        assert (agent_dir / ".agent" / "session").exists()
+        assert (agent_dir / ".agent" / "runner").exists()
 
-    def test_extract_text_content_list(self, manager):
-        """Test extracting text from list content."""
-        content = [{"text": "hello"}, {"text": "world"}]
-        result = manager._extract_text_content(content)
-        assert result == "hello\nworld"
+    def test_save_and_load_system_prompt(self, manager, tmp_path):
+        """Test saving and loading system prompt in .agent/ directory."""
+        agent_id = "test-agent"
+        custom_prompt = "You are a test assistant."
+        
+        manager._save_system_prompt(agent_id, custom_prompt)
+        
+        # Check file was created in .agent/ subdirectory
+        agent_dir = manager._get_agent_dir(agent_id)
+        prompt_file = agent_dir / ".agent" / "system_prompt.txt"
+        assert prompt_file.exists()
+        assert prompt_file.read_text() == custom_prompt
+        
+        # Load and verify
+        loaded = manager._load_system_prompt(agent_id)
+        assert loaded == custom_prompt
 
-    def test_format_tool_use_messages(self, manager):
-        """Test formatting tool use messages."""
-        content = [
-            {"text": "I'll run a command"},
-            {"type": "tool_use", "name": "shell", "input": {"command": "ls"}}
-        ]
-        result = manager._format_tool_use_messages(content)
-        assert len(result) == 2
-        assert result[0]["role"] == "assistant"
-        assert result[0]["content"] == "I'll run a command"
-        assert result[1]["role"] == "tool_use"
-        assert result[1]["tool"] == "shell"
-        assert result[1]["input"] == {"command": "ls"}
+    def test_has_existing_session_empty(self, manager):
+        """Test _has_existing_session returns False when no session exists."""
+        result = manager._has_existing_session("nonexistent-agent")
+        assert result == False
 
-    def test_format_tool_result_message(self, manager):
-        """Test formatting tool result messages."""
-        content = [
-            {
-                "type": "tool_result", 
-                "tool_use_id": "123",
-                "content": [{"text": "output here"}]
-            }
-        ]
-        result = manager._format_tool_result_message(content)
-        assert result is not None
-        assert result["role"] == "tool_result"
-        assert result["tool"] == "unknown"  # We don't extract tool name yet
-        assert result["output"] == "output here"
-
-    def test_format_tool_result_message_none(self, manager):
-        """Test tool result message with no tool_result."""
-        content = [{"text": "regular message"}]
-        result = manager._format_tool_result_message(content)
-        assert result is None
+    def test_has_existing_session_with_messages(self, manager, tmp_path):
+        """Test _has_existing_session returns True when messages exist."""
+        agent_id = "test-agent"
+        agent_dir = manager._get_agent_dir(agent_id)
+        
+        # Create FileSessionManager-style message files
+        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        messages_dir.mkdir(parents=True)
+        
+        # Create a message file
+        msg_data = {"message": {"role": "user", "content": "Hello"}, "message_id": 0}
+        (messages_dir / "message_0.json").write_text(json.dumps(msg_data))
+        
+        result = manager._has_existing_session(agent_id)
+        assert result == True
 
 
 class TestAgentInfo:

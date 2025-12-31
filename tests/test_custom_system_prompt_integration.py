@@ -65,9 +65,11 @@ class TestCustomSystemPromptIntegration:
                         assert result["status"] == "dispatched"
                         
                         # Wait for processing
+                        agent = manager.tracker.get_agent("custom-prompt-test")
                         for _ in range(120):
-                            if not manager.is_agent_processing("custom-prompt-test"):
+                            if agent and not await manager._get_agent_processing_state(agent):
                                 break
+                            agent = manager.tracker.get_agent("custom-prompt-test")
                             await asyncio.sleep(0.5)
                         
                         # Get first response
@@ -90,9 +92,11 @@ class TestCustomSystemPromptIntegration:
                         assert result2["status"] == "dispatched"
                         
                         # Wait for processing
+                        agent = manager.tracker.get_agent("custom-prompt-test")
                         for _ in range(120):
-                            if not manager.is_agent_processing("custom-prompt-test"):
+                            if agent and not await manager._get_agent_processing_state(agent):
                                 break
+                            agent = manager.tracker.get_agent("custom-prompt-test")
                             await asyncio.sleep(0.5)
                         
                         # Get response after restart
@@ -130,9 +134,11 @@ class TestCustomSystemPromptIntegration:
                         assert result1["status"] == "dispatched"
                         
                         # Wait for processing
+                        agent = manager.tracker.get_agent("existing-agent-test")
                         for _ in range(120):
-                            if not manager.is_agent_processing("existing-agent-test"):
+                            if agent and not await manager._get_agent_processing_state(agent):
                                 break
+                            agent = manager.tracker.get_agent("existing-agent-test")
                             await asyncio.sleep(0.5)
                         
                         # Try to send another message with different system prompt
@@ -146,9 +152,11 @@ class TestCustomSystemPromptIntegration:
                         assert result2["status"] == "dispatched"
                         
                         # Wait for processing
+                        agent = manager.tracker.get_agent("existing-agent-test")
                         for _ in range(120):
-                            if not manager.is_agent_processing("existing-agent-test"):
+                            if agent and not await manager._get_agent_processing_state(agent):
                                 break
+                            agent = manager.tracker.get_agent("existing-agent-test")
                             await asyncio.sleep(0.5)
                         
                         # Get latest response
@@ -188,9 +196,11 @@ class TestCustomSystemPromptIntegration:
                         assert result["status"] == "dispatched"
                         
                         # Wait for processing
+                        agent = manager.tracker.get_agent("default-prompt-test")
                         for _ in range(120):
-                            if not manager.is_agent_processing("default-prompt-test"):
+                            if agent and not await manager._get_agent_processing_state(agent):
                                 break
+                            agent = manager.tracker.get_agent("default-prompt-test")
                             await asyncio.sleep(0.5)
                         
                         # Get response
@@ -203,7 +213,7 @@ class TestCustomSystemPromptIntegration:
                         
                         # Check that no custom system prompt file was created
                         agent_dir = data_dir / "agents" / "default-prompt-test"
-                        prompt_file = agent_dir / "system_prompt.txt"
+                        prompt_file = agent_dir / ".agent" / "system_prompt.txt"
                         assert not prompt_file.exists()
                         
                     finally:
