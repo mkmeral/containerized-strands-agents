@@ -1032,9 +1032,165 @@
             }, 5000);
         }
         
-        // Show new agent form (placeholder - can be enhanced later)
+        // Show new agent form
         function showNewAgentForm() {
-            alert('New agent creation form would be implemented here. For now, agents are created automatically when you send a message to a new agent ID.');
+            // Hide chat, show form
+            document.getElementById('no-agent').style.display = 'none';
+            document.getElementById('chat-container').style.display = 'none';
+            
+            // Remove existing form if any
+            const existingForm = document.getElementById('new-agent-form');
+            if (existingForm) existingForm.remove();
+            
+            // Create form HTML
+            const formHtml = `
+                <div id="new-agent-form" class="new-agent-form">
+                    <div class="form-header">
+                        <h2>Create New Agent</h2>
+                        <p>Configure and start a new AI agent in an isolated Docker container.</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Agent ID *</label>
+                        <input type="text" id="new-agent-id" class="form-input" 
+                               placeholder="e.g., code-reviewer, data-analyst, my-helper"
+                               pattern="[a-z0-9-]+" />
+                        <div class="form-help">Lowercase letters, numbers, and hyphens only. This will be the agent's unique identifier.</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">System Prompt (optional)</label>
+                        <textarea id="new-agent-system-prompt" class="form-input form-textarea large"
+                                  placeholder="You are a helpful assistant specialized in..."></textarea>
+                        <div class="form-help">Define the agent's personality, expertise, and behavior. Leave empty for default.</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Initial Message *</label>
+                        <textarea id="new-agent-message" class="form-input form-textarea"
+                                  placeholder="Hello! Please help me with..."></textarea>
+                        <div class="form-help">The first message to send to the agent to start the conversation.</div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 15px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">AWS Profile (optional)</label>
+                            <input type="text" id="new-agent-aws-profile" class="form-input" 
+                                   placeholder="default" />
+                            <div class="form-help">AWS credentials profile for Bedrock access.</div>
+                        </div>
+                        
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">AWS Region (optional)</label>
+                            <input type="text" id="new-agent-aws-region" class="form-input" 
+                                   placeholder="us-east-1" />
+                            <div class="form-help">AWS region for Bedrock API calls.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-buttons">
+                        <button class="btn-secondary" onclick="cancelNewAgent()">Cancel</button>
+                        <button class="btn-primary" id="create-agent-btn" onclick="createNewAgent()">Create Agent</button>
+                    </div>
+                </div>
+            `;
+            
+            document.querySelector('.main-content').insertAdjacentHTML('beforeend', formHtml);
+            
+            // Focus the agent ID input
+            setTimeout(() => document.getElementById('new-agent-id').focus(), 100);
+            
+            // Clear current agent selection
+            currentAgentId = null;
+            renderAgents(getFilteredAndSortedAgents());
+        }
+        
+        // Cancel new agent form
+        function cancelNewAgent() {
+            const form = document.getElementById('new-agent-form');
+            if (form) form.remove();
+            
+            // Show default state
+            document.getElementById('no-agent').style.display = 'flex';
+        }
+        
+        // Create new agent
+        async function createNewAgent() {
+            const agentId = document.getElementById('new-agent-id').value.trim();
+            const systemPrompt = document.getElementById('new-agent-system-prompt').value.trim() || null;
+            const message = document.getElementById('new-agent-message').value.trim();
+            const awsProfile = document.getElementById('new-agent-aws-profile').value.trim() || null;
+            const awsRegion = document.getElementById('new-agent-aws-region').value.trim() || null;
+            
+            // Validation
+            if (!agentId) {
+                showError('Agent ID is required');
+                document.getElementById('new-agent-id').focus();
+                return;
+            }
+            
+            if (!/^[a-z0-9-]+$/.test(agentId)) {
+                showError('Agent ID can only contain lowercase letters, numbers, and hyphens');
+                document.getElementById('new-agent-id').focus();
+                return;
+            }
+            
+            if (!message) {
+                showError('Initial message is required');
+                document.getElementById('new-agent-message').focus();
+                return;
+            }
+            
+            // Check if agent already exists
+            if (allAgents.some(a => a.agent_id === agentId)) {
+                showError(`Agent "${agentId}" already exists. Choose a different ID or select it from the list.`);
+                document.getElementById('new-agent-id').focus();
+                return;
+            }
+            
+            // Disable button
+            const btn = document.getElementById('create-agent-btn');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+            
+            try {
+                const response = await fetch(`/agents/${agentId}/message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        aws_profile: awsProfile,
+                        aws_region: awsRegion,
+                        system_prompt: systemPrompt
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'dispatched' || data.status === 'queued') {
+                    // Remove form
+                    const form = document.getElementById('new-agent-form');
+                    if (form) form.remove();
+                    
+                    // Refresh agents list and select the new agent
+                    await loadAgents();
+                    await selectAgent(agentId);
+                    
+                    // Add the user message to UI immediately
+                    addMessageToUI('user', message);
+                    
+                    // Start polling for response
+                    pollForResponse();
+                } else {
+                    showError(data.error || 'Failed to create agent');
+                    btn.disabled = false;
+                    btn.textContent = 'Create Agent';
+                }
+            } catch (error) {
+                showError('Error creating agent: ' + error.message);
+                btn.disabled = false;
+                btn.textContent = 'Create Agent';
+            }
         }
         
         // Escape HTML
