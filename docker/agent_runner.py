@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
+from dataclasses import dataclass
 
 from strands import Agent
 from strands.agent.conversation_manager import SummarizingConversationManager
@@ -136,6 +137,78 @@ class HistoryResponse(BaseModel):
     messages: list[dict]
 
 
+@dataclass
+class QueuedRequest:
+    """Represents a queued chat request."""
+    message: str
+    response_future: asyncio.Future
+
+
+async def process_request_queue():
+    """Process requests from the queue sequentially."""
+    global _is_processing, _request_queue
+    
+    logger.info("Request queue processor started")
+    
+    while True:
+        try:
+            # Wait for a request from the queue
+            queued_request: QueuedRequest = await _request_queue.get()
+            
+            try:
+                _is_processing = True
+                agent = get_agent()
+                
+                # Run agent with retry logic for throttling
+                response_text = await invoke_agent_with_retry(agent, queued_request.message)
+                
+                # Set the result in the future
+                queued_request.response_future.set_result({
+                    "status": "success",
+                    "response": response_text,
+                    "agent_id": AGENT_ID,
+                })
+                
+            except Exception as e:
+                error_message = str(e)
+                logger.error(f"Error processing message: {error_message}")
+                
+                # Save error as an assistant message so it's visible in history
+                try:
+                    agent = get_agent()
+                    error_content = f"⚠️ **Error**: {error_message}"
+                    
+                    # Manually add error message to conversation history
+                    agent.messages.append({
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": error_content}]
+                    })
+                    
+                    # Persist the error message
+                    if hasattr(agent, 'session_manager') and agent.session_manager:
+                        agent.session_manager.save_session(agent.messages)
+                except Exception as save_error:
+                    logger.error(f"Failed to save error message: {save_error}")
+                
+                # Set the error in the future
+                queued_request.response_future.set_result({
+                    "status": "error",
+                    "response": error_message,
+                    "agent_id": AGENT_ID,
+                })
+                
+            finally:
+                _is_processing = False
+                _request_queue.task_done()
+                
+        except asyncio.CancelledError:
+            logger.info("Request queue processor cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Unexpected error in queue processor: {e}")
+            # Continue processing to avoid stopping the queue
+
+
 
 class IdleShutdownTimer:
     """Timer that shuts down the container after idle timeout."""
@@ -177,6 +250,10 @@ _agent: Optional[Agent] = None
 
 # Processing state tracking
 _is_processing: bool = False
+
+# Request queue for sequential processing
+_request_queue: Optional[asyncio.Queue] = None
+_queue_processor_task: Optional[asyncio.Task] = None
 
 
 def load_dynamic_tools(agent: Agent):
@@ -266,79 +343,79 @@ async def invoke_agent_with_retry(agent: Agent, message: str) -> str:
 
 @app.on_event("startup")
 async def startup():
-    """Start idle timer on startup."""
+    """Start idle timer and request queue on startup."""
+    global _request_queue, _queue_processor_task
+    
     WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     configure_git()
+    
+    # Initialize request queue
+    _request_queue = asyncio.Queue()
+    
+    # Start queue processor task
+    _queue_processor_task = asyncio.create_task(process_request_queue())
+    
     idle_timer.reset()
     logger.info(f"Agent {AGENT_ID} started. Idle timeout: {IDLE_TIMEOUT_MINUTES} minutes")
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    """Cancel idle timer on shutdown."""
+    """Cancel idle timer and queue processor on shutdown."""
+    global _queue_processor_task
+    
     idle_timer.cancel()
+    
+    # Cancel queue processor
+    if _queue_processor_task:
+        _queue_processor_task.cancel()
+        try:
+            await _queue_processor_task
+        except asyncio.CancelledError:
+            pass
+    
     # Session manager handles persistence automatically
     logger.info(f"Agent {AGENT_ID} shutting down")
 
 
 @app.get("/health")
 async def health():
-    """Health check endpoint with processing state."""
+    """Health check endpoint with processing state and queue depth."""
+    queue_depth = _request_queue.qsize() if _request_queue else 0
     return {
         "status": "healthy",
         "agent_id": AGENT_ID,
         "processing": _is_processing,
+        "queue_depth": queue_depth,
     }
 
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Send a message to the agent."""
-    global _is_processing
+    """Send a message to the agent (queued for sequential processing)."""
     idle_timer.reset()
     
-    try:
-        _is_processing = True
-        agent = get_agent()
-        
-        # Run agent with retry logic for throttling
-        response_text = await invoke_agent_with_retry(agent, request.message)
-        
-        # Session manager handles persistence automatically
-        
-        return ChatResponse(
-            status="success",
-            response=response_text,
-            agent_id=AGENT_ID,
-        )
-    except Exception as e:
-        error_message = str(e)
-        logger.error(f"Error processing message: {error_message}")
-        
-        # Save error as an assistant message so it's visible in history
-        try:
-            agent = get_agent()
-            error_content = f"⚠️ **Error**: {error_message}"
-            
-            # Manually add error message to conversation history
-            agent.messages.append({
-                "role": "assistant",
-                "content": [{"type": "text", "text": error_content}]
-            })
-            
-            # Persist the error message
-            if hasattr(agent, 'session_manager') and agent.session_manager:
-                agent.session_manager.save_session(agent.messages)
-        except Exception as save_error:
-            logger.error(f"Failed to save error message: {save_error}")
-        
-        return ChatResponse(
-            status="error",
-            response=error_message,
-            agent_id=AGENT_ID,
-        )
-    finally:
-        _is_processing = False
+    # Create a future to receive the response
+    response_future = asyncio.Future()
+    
+    # Create queued request
+    queued_request = QueuedRequest(
+        message=request.message,
+        response_future=response_future
+    )
+    
+    # Log queue status
+    queue_size_before = _request_queue.qsize()
+    if _is_processing or queue_size_before > 0:
+        logger.info(f"Request queued (current queue depth: {queue_size_before}, processing: {_is_processing})")
+    
+    # Add to queue
+    await _request_queue.put(queued_request)
+    
+    # Wait for the result from the queue processor
+    result = await response_future
+    
+    return ChatResponse(**result)
 
 
 @app.get("/history", response_model=HistoryResponse)
