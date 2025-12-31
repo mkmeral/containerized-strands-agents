@@ -1,6 +1,7 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+# App code lives in /app, but we'll set WORKDIR to /data/workspace later
+# so agent file operations persist to the mounted volume
 
 # Install system dependencies including Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -12,17 +13,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy agent code
-COPY *.py .
+COPY *.py /app/
 
 # Create tools directory for dynamic tool loading
 RUN mkdir -p /app/tools
 
-# Create workspace directory
+# Create workspace directory and set as working directory
+# This ensures relative paths in file operations persist to the mounted volume
 RUN mkdir -p /data/workspace
+WORKDIR /data/workspace
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
@@ -39,5 +42,5 @@ ENV AWS_DEFAULT_REGION=us-east-1
 # Expose port
 EXPOSE 8080
 
-# Run the agent
-CMD ["python", "agent_runner.py"]
+# Run the agent from /app
+CMD ["python", "/app/agent_runner.py"]

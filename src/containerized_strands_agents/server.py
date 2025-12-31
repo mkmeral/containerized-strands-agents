@@ -126,7 +126,7 @@ mcp = FastMCP(
 IMPORTANT: These are autonomous background workers, NOT interactive assistants.
 - send_message dispatches work to an agent and returns immediately
 - Agents work independently in the background (can take minutes to hours)
-- Do NOT poll get_messages waiting for results - agents write output to their workspace
+- Do NOT invoke get_messages multiple times waiting for results. Give time to agents for them to work and complete their task.
 - Use get_messages only when a human explicitly asks to check on an agent's progress
 
 Typical workflow:
