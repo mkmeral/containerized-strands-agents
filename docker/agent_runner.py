@@ -9,6 +9,7 @@ from pathlib import Path
 from threading import Timer
 from typing import Optional
 
+from dataclasses import dataclass
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
@@ -178,6 +179,73 @@ _agent: Optional[Agent] = None
 # Processing state tracking
 _is_processing: bool = False
 
+# Request queue for sequential processing
+_request_queue: Optional[asyncio.Queue] = None
+_queue_processor_task: Optional[asyncio.Task] = None
+
+
+@dataclass
+class QueuedRequest:
+    """A chat request waiting in the queue."""
+    message: str
+    response_future: asyncio.Future
+
+
+async def _process_request(message: str) -> dict:
+    """Process a single chat request. Returns response dict."""
+    global _is_processing
+    
+    try:
+        _is_processing = True
+        agent = get_agent()
+        response_text = await invoke_agent_with_retry(agent, message)
+        
+        return {
+            "status": "success",
+            "response": response_text,
+            "agent_id": AGENT_ID,
+        }
+    except Exception as e:
+        error_message = str(e)
+        logger.error(f"Error processing message: {error_message}")
+        
+        # Save error to conversation history
+        try:
+            agent = get_agent()
+            agent.messages.append({
+                "role": "assistant",
+                "content": [{"type": "text", "text": f"⚠️ **Error**: {error_message}"}]
+            })
+            if hasattr(agent, 'session_manager') and agent.session_manager:
+                agent.session_manager.save_session(agent.messages)
+        except Exception as save_error:
+            logger.error(f"Failed to save error message: {save_error}")
+        
+        return {
+            "status": "error",
+            "response": error_message,
+            "agent_id": AGENT_ID,
+        }
+    finally:
+        _is_processing = False
+
+
+async def _queue_processor():
+    """Background task that processes requests sequentially."""
+    logger.info("Request queue processor started")
+    
+    while True:
+        try:
+            request: QueuedRequest = await _request_queue.get()
+            result = await _process_request(request.message)
+            request.response_future.set_result(result)
+            _request_queue.task_done()
+        except asyncio.CancelledError:
+            logger.info("Request queue processor stopped")
+            break
+        except Exception as e:
+            logger.error(f"Queue processor error: {e}")
+
 
 def load_dynamic_tools(agent: Agent):
     """Load tools dynamically from /app/tools/ directory."""
@@ -266,79 +334,63 @@ async def invoke_agent_with_retry(agent: Agent, message: str) -> str:
 
 @app.on_event("startup")
 async def startup():
-    """Start idle timer on startup."""
+    """Start idle timer and request queue on startup."""
+    global _request_queue, _queue_processor_task
+    
     WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     configure_git()
+    
+    # Initialize request queue and processor
+    _request_queue = asyncio.Queue()
+    _queue_processor_task = asyncio.create_task(_queue_processor())
+    
     idle_timer.reset()
     logger.info(f"Agent {AGENT_ID} started. Idle timeout: {IDLE_TIMEOUT_MINUTES} minutes")
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    """Cancel idle timer on shutdown."""
+    """Cancel idle timer and queue processor on shutdown."""
+    global _queue_processor_task
+    
     idle_timer.cancel()
-    # Session manager handles persistence automatically
+    
+    if _queue_processor_task:
+        _queue_processor_task.cancel()
+        try:
+            await _queue_processor_task
+        except asyncio.CancelledError:
+            pass
+    
     logger.info(f"Agent {AGENT_ID} shutting down")
 
 
 @app.get("/health")
 async def health():
-    """Health check endpoint with processing state."""
+    """Health check endpoint with processing state and queue depth."""
     return {
         "status": "healthy",
         "agent_id": AGENT_ID,
         "processing": _is_processing,
+        "queue_depth": _request_queue.qsize() if _request_queue else 0,
     }
 
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Send a message to the agent."""
-    global _is_processing
+    """Send a message to the agent (queued for sequential processing)."""
     idle_timer.reset()
     
-    try:
-        _is_processing = True
-        agent = get_agent()
-        
-        # Run agent with retry logic for throttling
-        response_text = await invoke_agent_with_retry(agent, request.message)
-        
-        # Session manager handles persistence automatically
-        
-        return ChatResponse(
-            status="success",
-            response=response_text,
-            agent_id=AGENT_ID,
-        )
-    except Exception as e:
-        error_message = str(e)
-        logger.error(f"Error processing message: {error_message}")
-        
-        # Save error as an assistant message so it's visible in history
-        try:
-            agent = get_agent()
-            error_content = f"⚠️ **Error**: {error_message}"
-            
-            # Manually add error message to conversation history
-            agent.messages.append({
-                "role": "assistant",
-                "content": [{"type": "text", "text": error_content}]
-            })
-            
-            # Persist the error message
-            if hasattr(agent, 'session_manager') and agent.session_manager:
-                agent.session_manager.save_session(agent.messages)
-        except Exception as save_error:
-            logger.error(f"Failed to save error message: {save_error}")
-        
-        return ChatResponse(
-            status="error",
-            response=error_message,
-            agent_id=AGENT_ID,
-        )
-    finally:
-        _is_processing = False
+    # Create future for response
+    response_future = asyncio.Future()
+    queued = QueuedRequest(message=request.message, response_future=response_future)
+    
+    # Queue the request
+    await _request_queue.put(queued)
+    
+    # Wait for processing to complete
+    result = await response_future
+    return ChatResponse(**result)
 
 
 @app.get("/history", response_model=HistoryResponse)
