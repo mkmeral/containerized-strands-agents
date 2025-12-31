@@ -117,9 +117,6 @@
             border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
         
         .agent-item:hover {
@@ -130,6 +127,11 @@
             background: #007bff;
             color: white;
             border-color: #007bff;
+        }
+        
+        .agent-item.active .agent-status,
+        .agent-item.active .agent-meta {
+            color: rgba(255, 255, 255, 0.9);
         }
         
         .agent-info {
@@ -145,6 +147,59 @@
             font-size: 12px;
             opacity: 0.7;
             margin-top: 2px;
+        }
+        
+        .agent-meta {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .agent-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .copy-btn {
+            background: transparent;
+            border: 1px solid #dee2e6;
+            color: #6c757d;
+            padding: 2px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            margin-left: 4px;
+            transition: all 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+        
+        .agent-item.active .copy-btn {
+            border-color: rgba(255, 255, 255, 0.5);
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .agent-item.active .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .copy-btn.copied {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        
+        .agent-item.active .copy-btn.copied {
+            background: rgba(40, 167, 69, 0.9);
+            border-color: rgba(40, 167, 69, 0.9);
         }
         
         .status-badge {
@@ -679,6 +734,8 @@
             
             agentsList.innerHTML = agents.map(agent => {
                 const lastActivityText = formatLastActivity(agent.last_activity || agent.created_at);
+                const dataDir = agent.data_dir || 'N/A';
+                const port = agent.port || 'N/A';
                 
                 return `
                     <div class="agent-item ${agent.agent_id === currentAgentId ? 'active' : ''}" 
@@ -691,6 +748,21 @@
                             </div>
                             <div class="agent-status" style="margin-top: 4px; font-size: 11px;">
                                 Last active: ${lastActivityText}
+                            </div>
+                            <div class="agent-meta">
+                                <div class="agent-meta-row">
+                                    <span>Port: ${port}</span>
+                                </div>
+                                <div class="agent-meta-row">
+                                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(dataDir)}">
+                                        Path: ${escapeHtml(dataDir)}
+                                    </span>
+                                </div>
+                                <div class="agent-meta-row">
+                                    <button class="copy-btn" onclick="copyKiroCommand(event, '${escapeHtml(dataDir)}')" title="Copy 'kiro ${escapeHtml(dataDir)}' to clipboard">
+                                        📋 Copy kiro command
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1202,6 +1274,60 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        // Copy kiro command to clipboard
+        function copyKiroCommand(event, dataDir) {
+            // Prevent event bubbling to selectAgent
+            event.stopPropagation();
+            
+            const command = `kiro ${dataDir}`;
+            
+            // Copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(command)
+                    .then(() => {
+                        // Visual feedback
+                        const btn = event.target.closest('.copy-btn');
+                        const originalText = btn.innerHTML;
+                        btn.classList.add('copied');
+                        btn.innerHTML = '✓ Copied!';
+                        
+                        setTimeout(() => {
+                            btn.classList.remove('copied');
+                            btn.innerHTML = originalText;
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy:', err);
+                        showError('Failed to copy command to clipboard');
+                    });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = command;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    const btn = event.target.closest('.copy-btn');
+                    const originalText = btn.innerHTML;
+                    btn.classList.add('copied');
+                    btn.innerHTML = '✓ Copied!';
+                    
+                    setTimeout(() => {
+                        btn.classList.remove('copied');
+                        btn.innerHTML = originalText;
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                    showError('Failed to copy command to clipboard');
+                } finally {
+                    document.body.removeChild(textArea);
+                }
+            }
         }
         
         // Initialize
