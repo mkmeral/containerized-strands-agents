@@ -8,14 +8,17 @@ task execution while the host manages container lifecycle, idle timeouts, and se
 
 ## Repository Structure
 
-- `src/containerized_strands_agents/` — Core MCP server: FastMCP tools, agent manager, Docker
-  orchestration, and configuration
-- `docker/` — Docker image definition: agent runner FastAPI server, GitHub tools, Strands agent
-  setup
-- `ui/` — Optional web UI: FastAPI REST wrapper and HTML interface for managing agents
+- `src/containerized_strands_agents/` — Core package:
+  - `server.py` — MCP server (FastMCP tools)
+  - `agent_manager.py` — Docker orchestration, container lifecycle
+  - `agent.py` — Shared agent logic (create_agent, run_agent)
+  - `cli.py` — CLI commands (snapshot, restore, run)
+  - `config.py` — Configuration constants
+- `docker/` — Docker image: FastAPI runner, GitHub tools, requirements
+- `ui/` — Optional web UI: FastAPI REST wrapper and HTML interface
 - `scripts/` — Shell scripts for building Docker image and running the server
 - `tests/` — Unit, integration, and end-to-end tests using pytest
-- `data/` — Runtime persistence directory (gitignored): agent workspaces, sessions, task registry
+- `data/` — Runtime persistence (gitignored): agent workspaces, sessions, task registry
 
 ## Build & Development Commands
 
@@ -26,31 +29,30 @@ pip install -e ".[dev]"
 # Install with web UI support
 pip install -e ".[webui]"
 
-# Install all features
-pip install -e ".[webui,dev]"
-
 # Build Docker image (auto-built on first use, or manually)
 ./scripts/build_docker.sh
 
-# Run MCP server directly
+# Run MCP server
 python -m containerized_strands_agents.server
 
 # Run web UI (finds free port 8000-8100)
 containerized-strands-agents-webui
-# or
-python run_web_ui.py
 
 # Run tests
 python -m pytest tests/ -v
+```
 
-# Run specific test file
-python -m pytest tests/test_agent_manager.py -v
+## CLI Commands
 
-# Run integration tests (requires Docker)
-python -m pytest tests/test_integration.py -v
+```bash
+# Create a snapshot (backup) of an agent
+containerized-strands-agents snapshot --data-dir ./my-agent --output snapshot.zip
 
-# Run end-to-end tests (requires Docker + AWS credentials)
-python -m pytest tests/test_e2e.py -v
+# Restore an agent from snapshot
+containerized-strands-agents restore --snapshot snapshot.zip --data-dir ./restored-agent
+
+# Run an agent directly (no Docker)
+containerized-strands-agents run --data-dir ./my-agent --message "do the thing"
 ```
 
 ## Code Style & Conventions
@@ -103,10 +105,12 @@ python -m pytest tests/test_e2e.py -v
            ┌──────────────────────────────────────────────────┐
            │              Host File System                    │
            │  data/agents/{agent_id}/                         │
-           │    ├── workspace/     (persistent files)         │
-           │    ├── session_{id}/  (conversation history)     │
-           │    ├── tools/         (per-agent tools)          │
-           │    └── system_prompt.txt                         │
+           │    ├── workspace/        (agent's files)         │
+           │    └── .agent/                                   │
+           │        ├── session/      (conversation history)  │
+           │        ├── tools/        (per-agent tools)       │
+           │        ├── runner/       (agent code for GHA)    │
+           │        └── system_prompt.txt                     │
            └──────────────────────────────────────────────────┘
 ```
 
@@ -121,9 +125,40 @@ python -m pytest tests/test_e2e.py -v
 **Key Components:**
 - `FastMCP`: MCP protocol implementation exposing tools to clients
 - `AgentManager`: Orchestrates Docker containers, manages state via `TaskTracker`
+- `agent.py`: Shared agent logic used by both Docker runner and CLI
 - `agent_runner.py`: FastAPI server inside container running Strands Agent
 - `FileSessionManager`: Persists agent conversation history to JSON files
 - `SummarizingConversationManager`: Intelligently summarizes old messages to manage context
+
+## Snapshots & Portability
+
+Agents can be snapshotted (backed up) and restored anywhere. A snapshot is just a zip of the
+agent's data directory.
+
+**What's included in a snapshot:**
+- `workspace/` — Agent's files (repos, code, etc.)
+- `.agent/session/` — Conversation history (agent remembers context)
+- `.agent/tools/` — Custom tools
+- `.agent/runner/` — Agent code (for running without Docker)
+- `.agent/system_prompt.txt` — Custom system prompt
+
+**Snapshot workflow:**
+```bash
+# 1. Create snapshot
+containerized-strands-agents snapshot --data-dir ./data/agents/my-agent --output backup.zip
+
+# 2. Restore anywhere
+containerized-strands-agents restore --snapshot backup.zip --data-dir ./new-location
+
+# 3. Run restored agent (Docker or CLI)
+containerized-strands-agents run --data-dir ./new-location --message "continue where you left off"
+```
+
+**Portability:**
+- Snapshots work across machines (same OS)
+- Session uses hardcoded agent ID ("agent") so any restored snapshot continues the same conversation
+- Can run in Docker (via MCP server) or standalone (via CLI `run` command)
+- Designed for GitHub Actions: restore snapshot → run agent → upload new snapshot
 
 ## Testing Strategy
 
