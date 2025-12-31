@@ -159,6 +159,57 @@ containerized-strands-agents snapshot \
 - Restoring to an existing directory will prompt for confirmation
 - Restored agents can be started immediately using the MCP server or Web UI
 
+#### Pull from GitHub Actions
+
+```bash
+containerized-strands-agents pull --repo owner/repo --run-id 12345 --data-dir ./my-agent
+```
+
+Downloads agent state from a GitHub Actions artifact. Useful for continuing work started in CI.
+
+**Options:**
+- `--repo` (required): Repository in `owner/repo` format
+- `--run-id`: Download artifacts from a specific workflow run
+- `--artifact`: Download a specific artifact by name
+- `--data-dir`: Target directory (default: `./agent-data`)
+- `--token`: GitHub token (uses `GITHUB_TOKEN` env var if not provided)
+
+**Examples:**
+
+```bash
+# Pull from a specific run
+containerized-strands-agents pull \
+  --repo myorg/my-repo \
+  --run-id 12345678 \
+  --data-dir ./data/agents/from-gha
+
+# Pull a specific artifact by name
+containerized-strands-agents pull \
+  --repo myorg/my-repo \
+  --artifact agent-data-default-agent-42 \
+  --data-dir ./restored-agent
+
+# Uses gh CLI if available, otherwise GitHub API with token
+export GITHUB_TOKEN="ghp_xxxx"
+containerized-strands-agents pull --repo myorg/my-repo --run-id 12345
+```
+
+### GitHub Actions Workflow
+
+A workflow template is provided at `templates/gha-agent-workflow.yml` for running agents in GitHub Actions:
+
+```bash
+# Copy to your repo
+cp templates/gha-agent-workflow.yml .github/workflows/run-agent.yml
+```
+
+The workflow:
+1. Restores agent state from a previous artifact (optional)
+2. Runs the agent with your message
+3. Uploads updated state as an artifact
+
+Trigger via `workflow_dispatch` with a message input. See the template for required secrets (AWS credentials).
+
 ## Configuration
 
 ### Environment Variables

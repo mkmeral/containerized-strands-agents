@@ -55,6 +55,9 @@ containerized-strands-agents restore --snapshot snapshot.zip --data-dir ./restor
 
 # Run an agent directly (no Docker)
 containerized-strands-agents run --data-dir ./my-agent --message "do the thing"
+
+# Pull agent state from GitHub Actions artifact
+containerized-strands-agents pull --repo owner/repo --run-id 12345 --data-dir ./my-agent
 ```
 
 ## Code Style & Conventions

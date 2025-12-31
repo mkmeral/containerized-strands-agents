@@ -4,7 +4,10 @@
 import argparse
 import logging
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from typing import NoReturn
@@ -191,6 +194,177 @@ def run_command(data_dir: str, message: str, system_prompt: str = None) -> None:
         sys.exit(1)
 
 
+def pull_command(
+    repo: str,
+    artifact: str = None,
+    run_id: str = None,
+    data_dir: str = None,
+    token: str = None,
+) -> None:
+    """Pull agent state from GitHub Actions artifact.
+    
+    Args:
+        repo: Repository in owner/repo format
+        artifact: Artifact name to download (optional if run_id provided)
+        run_id: Run ID to download latest artifact from (optional if artifact provided)
+        data_dir: Target directory to extract to
+        token: GitHub token (uses GITHUB_TOKEN env var if not provided)
+    """
+    try:
+        # Validate inputs
+        if not artifact and not run_id:
+            raise ValueError("Either --artifact or --run-id must be provided")
+        
+        # Get GitHub token
+        gh_token = token or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        
+        # Check if gh CLI is available
+        gh_available = shutil.which("gh") is not None
+        
+        if not gh_available and not gh_token:
+            raise ValueError(
+                "GitHub CLI (gh) not found and no GITHUB_TOKEN set.\n"
+                "Either install gh CLI (https://cli.github.com/) or set GITHUB_TOKEN environment variable."
+            )
+        
+        # Resolve output path
+        data_dir_path = Path(data_dir).expanduser().resolve() if data_dir else Path.cwd() / "agent-data"
+        
+        # Check if target exists
+        if data_dir_path.exists() and any(data_dir_path.iterdir()):
+            response = input(
+                f"Target directory {data_dir_path} is not empty. "
+                f"Contents will be merged/overwritten. Continue? (y/N): "
+            )
+            if response.lower() != 'y':
+                print("Pull cancelled.")
+                return
+        
+        data_dir_path.mkdir(parents=True, exist_ok=True)
+        
+        if gh_available:
+            # Use gh CLI (simpler, handles auth automatically)
+            _pull_with_gh_cli(repo, artifact, run_id, data_dir_path)
+        else:
+            # Use GitHub API directly
+            _pull_with_api(repo, artifact, run_id, data_dir_path, gh_token)
+        
+        print(f"✓ Agent state pulled successfully to: {data_dir_path}")
+        
+        # Validate the pulled data
+        if (data_dir_path / ".agent").exists():
+            print(f"  Agent data structure verified.")
+        else:
+            print(f"  Warning: .agent/ directory not found - may not be a valid agent snapshot")
+        
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error pulling from GitHub: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _pull_with_gh_cli(repo: str, artifact: str, run_id: str, data_dir: Path) -> None:
+    """Pull artifact using GitHub CLI."""
+    if artifact:
+        # Download specific artifact by name
+        print(f"Downloading artifact '{artifact}' from {repo}...")
+        cmd = ["gh", "run", "download", "-R", repo, "-n", artifact, "-D", str(data_dir)]
+    else:
+        # Download from specific run
+        print(f"Downloading artifacts from run {run_id} in {repo}...")
+        cmd = ["gh", "run", "download", "-R", repo, run_id, "-D", str(data_dir)]
+    
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        error_msg = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"gh CLI failed: {error_msg}")
+
+
+def _pull_with_api(repo: str, artifact: str, run_id: str, data_dir: Path, token: str) -> None:
+    """Pull artifact using GitHub API directly."""
+    import urllib.request
+    import urllib.error
+    import json
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    
+    # If run_id provided, get artifacts from that run
+    if run_id:
+        print(f"Fetching artifacts from run {run_id}...")
+        url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/artifacts"
+        req = urllib.request.Request(url, headers=headers)
+        
+        try:
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode())
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"Failed to fetch artifacts: {e.code} {e.reason}")
+        
+        artifacts = data.get("artifacts", [])
+        if not artifacts:
+            raise ValueError(f"No artifacts found for run {run_id}")
+        
+        # Use the first artifact or find by name
+        if artifact:
+            matching = [a for a in artifacts if a["name"] == artifact]
+            if not matching:
+                available = [a["name"] for a in artifacts]
+                raise ValueError(f"Artifact '{artifact}' not found. Available: {available}")
+            artifact_info = matching[0]
+        else:
+            artifact_info = artifacts[0]
+            print(f"Using artifact: {artifact_info['name']}")
+        
+        artifact_id = artifact_info["id"]
+    else:
+        # Search for artifact by name across all runs
+        print(f"Searching for artifact '{artifact}'...")
+        url = f"https://api.github.com/repos/{repo}/actions/artifacts?name={artifact}"
+        req = urllib.request.Request(url, headers=headers)
+        
+        try:
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode())
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"Failed to search artifacts: {e.code} {e.reason}")
+        
+        artifacts = data.get("artifacts", [])
+        if not artifacts:
+            raise ValueError(f"Artifact '{artifact}' not found in {repo}")
+        
+        # Use the most recent one
+        artifact_info = artifacts[0]
+        artifact_id = artifact_info["id"]
+    
+    # Download the artifact
+    print(f"Downloading artifact (ID: {artifact_id})...")
+    download_url = f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip"
+    req = urllib.request.Request(download_url, headers=headers)
+    
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_file:
+        try:
+            with urllib.request.urlopen(req) as response:
+                tmp_file.write(response.read())
+            tmp_path = tmp_file.name
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"Failed to download artifact: {e.code} {e.reason}")
+    
+    # Extract the artifact
+    try:
+        print(f"Extracting to {data_dir}...")
+        with zipfile.ZipFile(tmp_path, 'r') as zipf:
+            zipf.extractall(data_dir)
+    finally:
+        os.unlink(tmp_path)
+
+
 def main() -> NoReturn:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -252,6 +426,33 @@ def main() -> NoReturn:
         help='Optional custom system prompt'
     )
     
+    # Pull command
+    pull_parser = subparsers.add_parser(
+        'pull',
+        help='Pull agent state from GitHub Actions artifact'
+    )
+    pull_parser.add_argument(
+        '--repo',
+        required=True,
+        help='Repository in owner/repo format'
+    )
+    pull_parser.add_argument(
+        '--artifact',
+        help='Artifact name to download'
+    )
+    pull_parser.add_argument(
+        '--run-id',
+        help='Run ID to download artifacts from'
+    )
+    pull_parser.add_argument(
+        '--data-dir',
+        help='Target directory to extract to (default: ./agent-data)'
+    )
+    pull_parser.add_argument(
+        '--token',
+        help='GitHub token (uses GITHUB_TOKEN env var if not provided)'
+    )
+    
     # Parse arguments
     args = parser.parse_args()
     
@@ -262,6 +463,14 @@ def main() -> NoReturn:
         restore_command(args.snapshot, args.data_dir)
     elif args.command == 'run':
         run_command(args.data_dir, args.message, args.system_prompt)
+    elif args.command == 'pull':
+        pull_command(
+            repo=args.repo,
+            artifact=args.artifact,
+            run_id=args.run_id,
+            data_dir=args.data_dir,
+            token=args.token,
+        )
     else:
         parser.print_help()
         sys.exit(1)

@@ -215,9 +215,9 @@
 | Restructure to `.agent/` layout | ✅ Done |
 | CLI commands for snapshot/restore | ✅ Done |
 | Hardcoded agent ID for portable snapshots | ✅ Done |
-| CLI command for GHA pull | ❌ Not started |
+| CLI command for GHA pull | ✅ Done |
+| GHA workflow template | ✅ Done |
 | AgentCore handler file | ❌ Not started |
-| GHA workflow template | ❌ Not started |
  
 ## Alternatives Not Chosen
  

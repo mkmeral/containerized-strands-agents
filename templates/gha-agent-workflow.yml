@@ -1,0 +1,125 @@
+# GitHub Actions workflow template for running Strands agents
+# 
+# Usage:
+# 1. Copy this file to your repo's .github/workflows/ directory
+# 2. Set up required secrets (AWS credentials)
+# 3. Trigger via workflow_dispatch with a message
+#
+# The workflow:
+# - Restores agent state from a previous artifact (if specified)
+# - Runs the agent with your message
+# - Uploads the updated state as an artifact
+#
+# To continue a conversation:
+# 1. Note the artifact name from a previous run (e.g., "agent-data-12345")
+# 2. Trigger a new run with that artifact name in snapshot_artifact input
+
+name: Run Strands Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Task/message for the agent'
+        required: true
+        type: string
+      snapshot_artifact:
+        description: 'Artifact name to restore from (optional, e.g., "agent-data-12345")'
+        required: false
+        type: string
+      agent_name:
+        description: 'Agent name (used for artifact naming)'
+        required: false
+        default: 'default-agent'
+        type: string
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # Adjust based on expected task duration
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Download previous state
+        if: inputs.snapshot_artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.snapshot_artifact }}
+          path: agent-data/
+        continue-on-error: true
+      
+      - name: Initialize new agent (if no snapshot)
+        if: ${{ !inputs.snapshot_artifact }}
+        run: |
+          mkdir -p agent-data/.agent/runner
+          mkdir -p agent-data/.agent/session
+          mkdir -p agent-data/.agent/tools
+          
+          # Copy runner files from this repo (adjust path as needed)
+          # If using containerized-strands-agents package:
+          # pip install containerized-strands-agents
+          # containerized-strands-agents restore --snapshot initial-agent.zip --data-dir agent-data
+          
+          echo "Agent data directory initialized"
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          
+          # Install from requirements if exists
+          if [ -f "agent-data/.agent/runner/requirements.txt" ]; then
+            pip install -r agent-data/.agent/runner/requirements.txt
+          else
+            # Fallback: install strands-agents directly
+            pip install strands-agents
+          fi
+      
+      - name: Run agent
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          BYPASS_TOOL_CONSENT: 'true'
+          # Optional: GitHub token for git operations
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: Other API keys
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        working-directory: agent-data
+        run: |
+          echo "Running agent with message: ${{ inputs.message }}"
+          echo "---"
+          
+          # Run the agent
+          python .agent/runner/agent_runner.py --message "${{ inputs.message }}"
+      
+      - name: Upload agent state
+        if: always()  # Upload even if agent fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-data-${{ inputs.agent_name }}-${{ github.run_number }}
+          path: agent-data/
+          retention-days: 30
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Agent Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Agent**: ${{ inputs.agent_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Message**: ${{ inputs.message }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Restored from**: ${{ inputs.snapshot_artifact || 'New agent' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Output artifact**: agent-data-${{ inputs.agent_name }}-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To continue this conversation, use artifact name:" >> $GITHUB_STEP_SUMMARY
+          echo "\`agent-data-${{ inputs.agent_name }}-${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
