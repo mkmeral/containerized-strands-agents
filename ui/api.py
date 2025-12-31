@@ -47,6 +47,7 @@ class Agent(BaseModel):
     processing: bool = False
     created_at: str | None = None
     last_activity: str | None = None
+    data_dir: str | None = None
 
 class AgentsResponse(BaseModel):
     status: str
@@ -104,6 +105,15 @@ async def list_agents():
     
     try:
         agents_data = await agent_manager.list_agents()
+        
+        # Ensure data_dir is populated with actual path
+        for agent_data in agents_data:
+            agent_id = agent_data['agent_id']
+            custom_data_dir = agent_data.get('data_dir')
+            # Get the actual data directory path from agent_manager
+            actual_dir = agent_manager._get_agent_dir(agent_id, custom_data_dir)
+            agent_data['data_dir'] = str(actual_dir)
+        
         agents = [Agent(**agent) for agent in agents_data]
         
         return AgentsResponse(
