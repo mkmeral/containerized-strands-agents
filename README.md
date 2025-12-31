@@ -109,6 +109,56 @@ send_message(
 )
 ```
 
+### CLI Commands for Snapshot/Restore
+
+The CLI provides commands to create and restore agent snapshots (backups):
+
+#### Create a Snapshot
+
+```bash
+containerized-strands-agents snapshot --data-dir ./my-agent --output snapshot.zip
+```
+
+Creates a zip archive of an agent's entire data directory, including:
+- Workspace files
+- Session history
+- System prompts
+- Tools
+- Runner files
+
+#### Restore from Snapshot
+
+```bash
+containerized-strands-agents restore --snapshot snapshot.zip --data-dir ./restored-agent
+```
+
+Extracts a snapshot to a new (or existing) directory. The restored agent is immediately ready to run.
+
+**Examples:**
+
+```bash
+# Backup an agent
+containerized-strands-agents snapshot \
+  --data-dir ./data/agents/my-project \
+  --output backups/my-project-2024-01-01.zip
+
+# Restore to a new location
+containerized-strands-agents restore \
+  --snapshot backups/my-project-2024-01-01.zip \
+  --data-dir ./data/agents/my-project-restored
+
+# Use with custom data directories
+containerized-strands-agents snapshot \
+  --data-dir ~/projects/agent-workspace \
+  --output ~/backups/agent-snapshot.zip
+```
+
+**Notes:**
+- Snapshots work with both default data directories (`./data/agents/{id}`) and custom ones
+- The CLI validates the directory structure before creating snapshots
+- Restoring to an existing directory will prompt for confirmation
+- Restored agents can be started immediately using the MCP server or Web UI
+
 ## Configuration
 
 ### Environment Variables

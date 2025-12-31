@@ -31,7 +31,8 @@ webui = [
 ]
 
 [project.scripts]
-containerized-strands-agents = "containerized_strands_agents.server:main"
+containerized-strands-agents = "containerized_strands_agents.cli:main"
+containerized-strands-agents-server = "containerized_strands_agents.server:main"
 containerized-strands-agents-webui = "ui.run_ui:main"
 
 [build-system]
