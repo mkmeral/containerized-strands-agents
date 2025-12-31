@@ -75,7 +75,7 @@ Add to your MCP configuration (e.g., `~/.kiro/settings/mcp.json`):
 {
   "mcpServers": {
     "containerized-strands-agents": {
-      "command": "containerized-strands-agents",
+      "command": "containerized-strands-agents-server",
       "env": {
         "CONTAINERIZED_AGENTS_GITHUB_TOKEN": "github_pat_xxxx",
         "AWS_BEARER_TOKEN_BEDROCK": "optional-bearer-token"
@@ -238,10 +238,12 @@ Each agent has access to:
 data/
 ├── tasks.json              # Agent registry
 └── agents/{agent_id}/
-    ├── session_{id}/       # Conversation history
-    ├── system_prompt.txt   # Custom system prompt
-    ├── tools/              # Per-agent tools
-    └── workspace/          # Agent's persistent files
+    ├── workspace/          # Agent's persistent files
+    └── .agent/
+        ├── session/        # Conversation history (FileSessionManager)
+        ├── system_prompt.txt   # Custom system prompt
+        ├── tools/          # Per-agent tools
+        └── runner/         # Agent code for standalone execution
 ```
 
 ## Development
