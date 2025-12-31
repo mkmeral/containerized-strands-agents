@@ -36,17 +36,17 @@ class SendMessageRequest(BaseModel):
 class SendMessageResponse(BaseModel):
     status: str
     agent_id: str
-    message: str = None
-    error: str = None
+    message: str | None = None
+    error: str | None = None
 
 class Agent(BaseModel):
     agent_id: str
     status: str
-    container_id: str = None
-    port: int = None
+    container_id: str | None = None
+    port: int | None = None
     processing: bool = False
-    created_at: str = None
-    last_activity: str = None
+    created_at: str | None = None
+    last_activity: str | None = None
 
 class AgentsResponse(BaseModel):
     status: str
@@ -59,13 +59,13 @@ class Message(BaseModel):
 class MessagesResponse(BaseModel):
     status: str
     messages: List[Message]
-    agent_id: str = None
+    agent_id: str | None = None
     processing: bool = False
 
 class StopAgentResponse(BaseModel):
     status: str
-    message: str = None
-    error: str = None
+    message: str | None = None
+    error: str | None = None
 
 # Startup/Shutdown events
 @app.on_event("startup")
