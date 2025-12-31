@@ -726,6 +726,10 @@
         async function selectAgent(agentId) {
             currentAgentId = agentId;
             
+            // Remove new agent form if open
+            const newAgentForm = document.getElementById('new-agent-form');
+            if (newAgentForm) newAgentForm.remove();
+            
             // Update UI
             document.getElementById('no-agent').style.display = 'none';
             document.getElementById('chat-container').style.display = 'flex';
