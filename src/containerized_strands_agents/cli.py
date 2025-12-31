@@ -2,10 +2,20 @@
 """CLI commands for containerized-strands-agents snapshot management."""
 
 import argparse
+import logging
+import os
 import sys
 import zipfile
 from pathlib import Path
 from typing import NoReturn
+
+from .agent import create_agent, run_agent
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 def validate_data_dir(data_dir: Path) -> None:
@@ -144,6 +154,43 @@ def restore_command(snapshot: str, data_dir: str) -> None:
         sys.exit(1)
 
 
+def run_command(data_dir: str, message: str, system_prompt: str = None) -> None:
+    """Run an agent with a message and print the response.
+    
+    Args:
+        data_dir: Path to the agent data directory
+        message: Message to send to the agent
+        system_prompt: Optional custom system prompt
+    """
+    try:
+        # Resolve path
+        data_dir_path = Path(data_dir).expanduser().resolve()
+        
+        # Create data directory if it doesn't exist
+        data_dir_path.mkdir(parents=True, exist_ok=True)
+        
+        # Set bypass tool consent for CLI operation
+        os.environ["BYPASS_TOOL_CONSENT"] = "true"
+        
+        # Create agent
+        print(f"Initializing agent from {data_dir_path}...", file=sys.stderr)
+        agent = create_agent(
+            data_dir=data_dir_path,
+            system_prompt=system_prompt,
+        )
+        
+        # Run agent with message
+        print(f"Running agent...", file=sys.stderr)
+        response = run_agent(agent, message)
+        
+        # Print response to stdout
+        print(response)
+        
+    except Exception as e:
+        print(f"Error running agent: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> NoReturn:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -185,6 +232,26 @@ def main() -> NoReturn:
         help='Path to the target directory to restore the agent'
     )
     
+    # Run command
+    run_parser = subparsers.add_parser(
+        'run',
+        help='Run an agent with a message'
+    )
+    run_parser.add_argument(
+        '--data-dir',
+        required=True,
+        help='Path to the agent data directory'
+    )
+    run_parser.add_argument(
+        '--message',
+        required=True,
+        help='Message to send to the agent'
+    )
+    run_parser.add_argument(
+        '--system-prompt',
+        help='Optional custom system prompt'
+    )
+    
     # Parse arguments
     args = parser.parse_args()
     
@@ -193,6 +260,8 @@ def main() -> NoReturn:
         snapshot_command(args.data_dir, args.output)
     elif args.command == 'restore':
         restore_command(args.snapshot, args.data_dir)
+    elif args.command == 'run':
+        run_command(args.data_dir, args.message, args.system_prompt)
     else:
         parser.print_help()
         sys.exit(1)
