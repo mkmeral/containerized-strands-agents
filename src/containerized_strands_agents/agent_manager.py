@@ -257,6 +257,16 @@ class AgentManager:
                 dest_file = runner_dir / py_file.name
                 shutil.copy2(py_file, dest_file)
                 logger.info(f"Copied runner file {py_file.name} to agent {agent_id}")
+            
+            # Also copy the shared agent.py module for standalone snapshots
+            # This allows snapshots to run without the full package installed
+            agent_module = Path(__file__).parent / "agent.py"
+            if agent_module.exists():
+                dest_file = runner_dir / "agent.py"
+                shutil.copy2(agent_module, dest_file)
+                logger.info(f"Copied agent.py module to agent {agent_id}")
+            else:
+                logger.warning(f"agent.py module not found at {agent_module}")
         except Exception as e:
             logger.error(f"Failed to copy runner files to agent {agent_id}: {e}")
 

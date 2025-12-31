@@ -15,7 +15,12 @@ from pydantic import BaseModel
 import uvicorn
 
 from strands import Agent
-from containerized_strands_agents.agent import create_agent, run_agent
+
+# Try importing from package first (Docker), fall back to local (standalone snapshot)
+try:
+    from containerized_strands_agents.agent import create_agent, run_agent
+except ImportError:
+    from agent import create_agent, run_agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
