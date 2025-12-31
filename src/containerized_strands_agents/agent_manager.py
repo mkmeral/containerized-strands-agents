@@ -27,13 +27,28 @@ from containerized_strands_agents.config import (
 
 logger = logging.getLogger(__name__)
 
-# Environment variables to pass through to containers
-PASSTHROUGH_ENV_VARS = [
-    "CONTAINERIZED_AGENTS_GITHUB_TOKEN",  # GitHub token for git push
-    "OPENAI_API_KEY",  # OpenAI API key
-    "GOOGLE_API_KEY",  # Google/Gemini API key
-    "AWS_BEARER_TOKEN_BEDROCK",  # AWS bearer token for Bedrock cross-account
+# Environment variables to pass through to containers with their capability descriptions
+ENV_CAPABILITIES = [
+    {
+        "env_var": "CONTAINERIZED_AGENTS_GITHUB_TOKEN",
+        "capability": "GitHub: Git is configured with authentication, you can clone private repos and push commits",
+    },
+    {
+        "env_var": "OPENAI_API_KEY",
+        "capability": "OpenAI API key is available for use",
+    },
+    {
+        "env_var": "GOOGLE_API_KEY",
+        "capability": "Google/Gemini API key is available for use",
+    },
+    {
+        "env_var": "AWS_BEARER_TOKEN_BEDROCK",
+        "capability": "AWS Bedrock bearer token is available",
+    },
 ]
+
+# Extract just the env var names for passthrough
+PASSTHROUGH_ENV_VARS = [item["env_var"] for item in ENV_CAPABILITIES]
 
 
 class AgentInfo(BaseModel):
@@ -446,6 +461,16 @@ class AgentManager:
             value = os.environ.get(var_name)
             if value:
                 env[var_name] = value
+
+        # Build env metadata for agent to know what capabilities are available
+        env_metadata = {
+            item["env_var"]: {
+                "available": bool(os.environ.get(item["env_var"])),
+                "capability": item["capability"],
+            }
+            for item in ENV_CAPABILITIES
+        }
+        env["AGENT_ENV_METADATA"] = json.dumps(env_metadata)
 
         # Build volumes - include AWS credentials directory if it exists
         volumes = {

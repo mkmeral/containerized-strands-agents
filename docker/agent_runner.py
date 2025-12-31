@@ -1,6 +1,7 @@
 """Agent Runner - FastAPI server running inside Docker container with Strands Agent."""
 
 import asyncio
+import json
 import logging
 import os
 import signal
@@ -56,19 +57,34 @@ MAX_RETRIES = 3
 INITIAL_RETRY_DELAY_SECONDS = 60  # Start with 1 minute
 RETRY_BACKOFF_MULTIPLIER = 2  # Double delay each retry
 
+
+def get_env_capabilities() -> str:
+    """Get available capabilities from environment metadata."""
+    metadata_str = os.getenv("AGENT_ENV_METADATA", "{}")
+    try:
+        metadata = json.loads(metadata_str)
+        caps = [v["capability"] for v in metadata.values() if v.get("available")]
+        return "\n".join(f"- {c}" for c in caps) if caps else ""
+    except Exception:
+        return ""
+
+
 # System prompt for the agent - load custom if available
 def load_system_prompt() -> str:
     """Load system prompt, preferring custom if available."""
     if os.getenv("CUSTOM_SYSTEM_PROMPT") == "true" and CUSTOM_SYSTEM_PROMPT_FILE.exists():
         try:
-            custom_prompt = CUSTOM_SYSTEM_PROMPT_FILE.read_text()
+            base_prompt = CUSTOM_SYSTEM_PROMPT_FILE.read_text()
             logger.info("Using custom system prompt")
-            return custom_prompt
         except Exception as e:
             logger.error(f"Failed to load custom system prompt: {e}")
             logger.info("Falling back to default system prompt")
+            base_prompt = None
+    else:
+        base_prompt = None
     
-    return """You are a helpful AI assistant running in an isolated Docker container.
+    if not base_prompt:
+        base_prompt = """You are a helpful AI assistant running in an isolated Docker container.
 
 IMPORTANT: Your persistent workspace is /data/workspace. ALWAYS work in this directory.
 - Clone repos here: cd /data/workspace && git clone ...
@@ -89,6 +105,13 @@ When given a task:
 3. Test your work before committing
 4. Commit with clear messages
 """
+    
+    # Append environment capabilities if any
+    capabilities = get_env_capabilities()
+    if capabilities:
+        base_prompt += f"\n\nEnvironment capabilities:\n{capabilities}"
+    
+    return base_prompt
 
 SYSTEM_PROMPT = load_system_prompt()
 
