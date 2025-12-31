@@ -48,7 +48,7 @@ AGENT_ID = os.getenv("AGENT_ID", "default")
 IDLE_TIMEOUT_MINUTES = int(os.getenv("IDLE_TIMEOUT_MINUTES", "30"))
 DATA_DIR = Path("/data")
 WORKSPACE_DIR = DATA_DIR / "workspace"
-CUSTOM_SYSTEM_PROMPT_FILE = DATA_DIR / "system_prompt.txt"
+CUSTOM_SYSTEM_PROMPT_FILE = DATA_DIR / ".agent" / "system_prompt.txt"
 
 # Retry configuration
 MAX_RETRIES = 3
@@ -168,7 +168,7 @@ class IdleShutdownTimer:
 app = FastAPI(title=f"Agent {AGENT_ID}")
 session_manager = FileSessionManager(
     session_id=AGENT_ID,
-    storage_dir="/data"
+    storage_dir="/data/.agent/session"
 )
 idle_timer = IdleShutdownTimer(IDLE_TIMEOUT_MINUTES)
 

@@ -172,7 +172,11 @@ class AgentManager:
         
         agent_dir.mkdir(parents=True, exist_ok=True)
         (agent_dir / "workspace").mkdir(exist_ok=True)
-        (agent_dir / "tools").mkdir(exist_ok=True)
+        # New .agent/ structure
+        (agent_dir / ".agent").mkdir(exist_ok=True)
+        (agent_dir / ".agent" / "tools").mkdir(exist_ok=True)
+        (agent_dir / ".agent" / "session").mkdir(exist_ok=True)
+        (agent_dir / ".agent" / "runner").mkdir(exist_ok=True)
         return agent_dir
 
     def _copy_global_tools(self, agent_id: str, data_dir: str | None = None):
@@ -186,7 +190,7 @@ class AgentManager:
             logger.warning(f"Global tools directory not found or not a directory: {global_tools_dir}")
             return
         
-        agent_tools_dir = self._get_agent_dir(agent_id, data_dir) / "tools"
+        agent_tools_dir = self._get_agent_dir(agent_id, data_dir) / ".agent" / "tools"
         
         try:
             # Copy all .py files from global tools directory
@@ -202,7 +206,7 @@ class AgentManager:
         if not tools:
             return
         
-        agent_tools_dir = self._get_agent_dir(agent_id, data_dir) / "tools"
+        agent_tools_dir = self._get_agent_dir(agent_id, data_dir) / ".agent" / "tools"
         
         for tool_path in tools:
             try:
@@ -220,17 +224,38 @@ class AgentManager:
             except Exception as e:
                 logger.error(f"Failed to copy tool {tool_path} to agent {agent_id}: {e}")
 
+    def _copy_runner_files(self, agent_id: str, data_dir: str | None = None):
+        """Copy docker/*.py files to .agent/runner/ directory."""
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
+        runner_dir = agent_dir / ".agent" / "runner"
+        
+        # Find the docker directory relative to this file
+        docker_dir = Path(__file__).parent.parent.parent / "docker"
+        
+        if not docker_dir.exists():
+            logger.warning(f"Docker directory not found at {docker_dir}")
+            return
+        
+        try:
+            # Copy all .py files from docker directory
+            for py_file in docker_dir.glob("*.py"):
+                dest_file = runner_dir / py_file.name
+                shutil.copy2(py_file, dest_file)
+                logger.info(f"Copied runner file {py_file.name} to agent {agent_id}")
+        except Exception as e:
+            logger.error(f"Failed to copy runner files to agent {agent_id}: {e}")
+
     def _save_system_prompt(self, agent_id: str, system_prompt: str, data_dir: str | None = None):
         """Save custom system prompt for an agent."""
         agent_dir = self._get_agent_dir(agent_id, data_dir)
-        prompt_file = agent_dir / "system_prompt.txt"
+        prompt_file = agent_dir / ".agent" / "system_prompt.txt"
         prompt_file.write_text(system_prompt)
         logger.info(f"Saved custom system prompt for agent {agent_id}")
 
     def _load_system_prompt(self, agent_id: str, data_dir: str | None = None) -> Optional[str]:
         """Load custom system prompt for an agent."""
         agent_dir = self._get_agent_dir(agent_id, data_dir)
-        prompt_file = agent_dir / "system_prompt.txt"
+        prompt_file = agent_dir / ".agent" / "system_prompt.txt"
         if prompt_file.exists():
             return prompt_file.read_text()
         return None
@@ -272,8 +297,8 @@ class AgentManager:
     def _has_existing_session(self, agent_id: str, data_dir: str | None = None) -> bool:
         """Check if agent has an existing session (messages)."""
         agent_dir = self._get_agent_dir(agent_id, data_dir)
-        # FileSessionManager stores messages in: session_{agent_id}/agents/agent_default/messages/
-        messages_dir = agent_dir / f"session_{agent_id}" / "agents" / "agent_default" / "messages"
+        # FileSessionManager stores messages in: .agent/session/agents/agent_default/messages/
+        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
         if messages_dir.exists():
             try:
                 message_files = list(messages_dir.glob("message_*.json"))
@@ -362,6 +387,10 @@ class AgentManager:
             self._copy_global_tools(agent_id, effective_data_dir)
             # Copy per-agent tools (these can override global tools with same names)
             self._copy_per_agent_tools(agent_id, tools, effective_data_dir)
+        
+        # Always copy runner files for new agents or when restarting
+        if not agent:
+            self._copy_runner_files(agent_id, effective_data_dir)
         
         if agent and agent.container_id:
             # Check if container is still running
@@ -453,7 +482,7 @@ class AgentManager:
         }
         
         # Mount the tools directory into /app/tools for the agent to load
-        agent_tools_dir = agent_dir / "tools"
+        agent_tools_dir = agent_dir / ".agent" / "tools"
         if agent_tools_dir.exists():
             volumes[str(agent_tools_dir.absolute())] = {"bind": "/app/tools", "mode": "ro"}
         
@@ -613,10 +642,10 @@ class AgentManager:
                     logger.error(f"Failed to get messages from agent {agent_id}: {e}")
 
         # Fallback: read from FileSessionManager storage
-        # FileSessionManager stores messages in: session_{agent_id}/agents/agent_default/messages/
+        # FileSessionManager stores messages in: .agent/session/agents/agent_default/messages/
         # Each file has structure: {"message": {...}, "message_id": N, ...}
         agent_dir = self._get_agent_dir(agent_id, agent.data_dir)
-        messages_dir = agent_dir / f"session_{agent_id}" / "agents" / "agent_default" / "messages"
+        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
         if messages_dir.exists():
             try:
                 # Read all message files and sort by index
