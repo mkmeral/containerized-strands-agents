@@ -32,6 +32,7 @@ class SendMessageRequest(BaseModel):
     aws_profile: str | None = None
     aws_region: str | None = None
     system_prompt: str | None = None
+    description: str | None = None
 
 class SendMessageResponse(BaseModel):
     status: str
@@ -48,6 +49,7 @@ class Agent(BaseModel):
     created_at: str | None = None
     last_activity: str | None = None
     data_dir: str | None = None
+    description: str | None = None
 
 class AgentsResponse(BaseModel):
     status: str
@@ -136,7 +138,8 @@ async def send_message(agent_id: str, request: SendMessageRequest):
             message=request.message,
             aws_profile=request.aws_profile,
             aws_region=request.aws_region,
-            system_prompt=request.system_prompt
+            system_prompt=request.system_prompt,
+            description=request.description
         )
         
         return SendMessageResponse(

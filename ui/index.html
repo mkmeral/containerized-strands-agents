@@ -143,6 +143,21 @@
             font-size: 14px;
         }
         
+        .agent-description {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 4px;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .agent-item.active .agent-description {
+            color: rgba(255, 255, 255, 0.85);
+        }
+        
         .agent-status {
             font-size: 12px;
             opacity: 0.7;
@@ -736,12 +751,14 @@
                 const lastActivityText = formatLastActivity(agent.last_activity || agent.created_at);
                 const dataDir = agent.data_dir || 'N/A';
                 const port = agent.port || 'N/A';
+                const description = agent.description || '';
                 
                 return `
                     <div class="agent-item ${agent.agent_id === currentAgentId ? 'active' : ''}" 
                          onclick="selectAgent('${agent.agent_id}')">
                         <div class="agent-info">
                             <div class="agent-id">${agent.agent_id}</div>
+                            ${description ? `<div class="agent-description">${escapeHtml(description)}</div>` : ''}
                             <div class="agent-status">
                                 <span class="status-badge status-${agent.status}">${agent.status}</span>
                                 ${agent.processing ? '<span class="status-badge status-processing">Processing</span>' : ''}
@@ -1135,6 +1152,13 @@
                     </div>
                     
                     <div class="form-group">
+                        <label class="form-label">Description (optional)</label>
+                        <input type="text" id="new-agent-description" class="form-input" 
+                               placeholder="e.g., Reviews Python code for best practices" />
+                        <div class="form-help">Brief description to help identify this agent later.</div>
+                    </div>
+                    
+                    <div class="form-group">
                         <label class="form-label">System Prompt (optional)</label>
                         <textarea id="new-agent-system-prompt" class="form-input form-textarea large"
                                   placeholder="You are a helpful assistant specialized in..."></textarea>
@@ -1193,6 +1217,7 @@
         // Create new agent
         async function createNewAgent() {
             const agentId = document.getElementById('new-agent-id').value.trim();
+            const description = document.getElementById('new-agent-description').value.trim() || null;
             const systemPrompt = document.getElementById('new-agent-system-prompt').value.trim() || null;
             const message = document.getElementById('new-agent-message').value.trim();
             const awsProfile = document.getElementById('new-agent-aws-profile').value.trim() || null;
@@ -1237,7 +1262,8 @@
                         message: message,
                         aws_profile: awsProfile,
                         aws_region: awsRegion,
-                        system_prompt: systemPrompt
+                        system_prompt: systemPrompt,
+                        description: description
                     })
                 });
                 
