@@ -61,6 +61,7 @@ class AgentInfo(BaseModel):
     created_at: str
     last_activity: str
     data_dir: Optional[str] = None  # Custom data directory for this agent
+    description: Optional[str] = None  # Brief description of the agent's purpose
 
 
 class TaskTracker:
@@ -416,6 +417,7 @@ class AgentManager:
         data_dir: str | None = None,
         mcp_config: dict | None = None,
         mcp_config_file: str | None = None,
+        description: str | None = None,
     ) -> AgentInfo:
         """Get existing agent or create new one.
         
@@ -428,12 +430,19 @@ class AgentManager:
             mcp_config_file: Optional path to an mcp.json file on the host machine.
                             If provided, the config is read and persisted to agent's .agent/mcp.json.
                             Takes precedence over mcp_config if both are provided.
+            description: Optional brief description of the agent's purpose. Helps identify
+                        agents in list_agents. Set on first message or updated if provided again.
         """
         agent = self.tracker.get_agent(agent_id)
         
         # If agent exists and data_dir is provided, update it
         if agent and data_dir:
             agent.data_dir = data_dir
+            self.tracker.update_agent(agent)
+        
+        # Update description if provided
+        if agent and description:
+            agent.description = description
             self.tracker.update_agent(agent)
         
         # Use agent's stored data_dir or the provided one
@@ -509,7 +518,7 @@ class AgentManager:
                 return await self._start_container(agent, aws_profile=aws_profile, aws_region=aws_region)
         
         # Create new agent
-        return await self._create_agent(agent_id, aws_profile=aws_profile, aws_region=aws_region, data_dir=effective_data_dir)
+        return await self._create_agent(agent_id, aws_profile=aws_profile, aws_region=aws_region, data_dir=effective_data_dir, description=description)
 
     async def _create_agent(
         self,
@@ -517,6 +526,7 @@ class AgentManager:
         aws_profile: str | None = None,
         aws_region: str | None = None,
         data_dir: str | None = None,
+        description: str | None = None,
     ) -> AgentInfo:
         """Create a new agent with Docker container."""
         port = self._get_next_port()
@@ -532,6 +542,7 @@ class AgentManager:
             created_at=now,
             last_activity=now,
             data_dir=data_dir,
+            description=description,
         )
 
         return await self._start_container(agent, aws_profile=aws_profile, aws_region=aws_region)
@@ -648,6 +659,7 @@ class AgentManager:
         data_dir: str | None = None,
         mcp_config: dict | None = None,
         mcp_config_file: str | None = None,
+        description: str | None = None,
     ) -> dict:
         """Send a message to an agent (fire-and-forget).
         
@@ -662,6 +674,8 @@ class AgentManager:
             mcp_config_file: Optional path to an mcp.json file on the host machine.
                             If provided, the config is read and persisted to agent's .agent/mcp.json.
                             Takes precedence over mcp_config if both are provided.
+            description: Optional brief description of the agent's purpose. Helps identify
+                        agents in list_agents. Set on first message or updated if provided again.
         """
         try:
             agent = await self.get_or_create_agent(
@@ -674,6 +688,7 @@ class AgentManager:
                 data_dir=data_dir,
                 mcp_config=mcp_config,
                 mcp_config_file=mcp_config_file,
+                description=description,
             )
         except ValueError as e:
             # Handle system prompt file errors

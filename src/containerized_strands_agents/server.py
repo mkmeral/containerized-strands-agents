@@ -96,7 +96,10 @@ def _build_send_message_docstring() -> str:
         mcp_config_file: Path to an existing mcp.json file on the host machine.
                          The config is read and persisted to the agent's .agent/mcp.json.
                          Takes precedence over mcp_config if both are provided.
-                         Tip: Point to your existing ~/.kiro/settings/mcp.json or similar."""
+                         Tip: Point to your existing ~/.kiro/settings/mcp.json or similar.
+        description: Brief description of the agent's purpose (1-2 sentences).
+                     Helps identify agents when using list_agents. Set on first message
+                     or updated if provided again."""
 
     # Get available system prompts
     available_prompts = _parse_system_prompts_env()
@@ -158,6 +161,7 @@ async def _send_message(
     data_dir: str | None = None,
     mcp_config: dict | None = None,
     mcp_config_file: str | None = None,
+    description: str | None = None,
 ) -> dict:
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
@@ -174,6 +178,7 @@ async def _send_message(
         data_dir=data_dir,
         mcp_config=mcp_config,
         mcp_config_file=mcp_config_file,
+        description=description,
     )
     return result
 
