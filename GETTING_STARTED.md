@@ -98,6 +98,7 @@ containerized-strands-agents restore --snapshot backup.zip --data-dir ./new-loca
 | `AGENT_HOST_IDLE_TIMEOUT` | `720` | Minutes before idle container stops (12 hrs) |
 | `CONTAINERIZED_AGENTS_SYSTEM_PROMPTS` | - | Comma-separated paths to system prompt files |
 | `CONTAINERIZED_AGENTS_TOOLS` | - | Path to global tools directory |
+| `CONTAINERIZED_AGENTS_MCP_CONFIG` | - | Path to default mcp.json for all agents |
 
 ### Passed to Containers
 
@@ -127,12 +128,15 @@ containerized-strands-agents-webui
       "command": "containerized-strands-agents-server",
       "env": {
         "CONTAINERIZED_AGENTS_GITHUB_TOKEN": "github_pat_xxxx",
+        "CONTAINERIZED_AGENTS_MCP_CONFIG": "/path/to/mcp.json",
         "AWS_BEARER_TOKEN_BEDROCK": "your-token"
       }
     }
   }
 }
 ```
+
+The `CONTAINERIZED_AGENTS_MCP_CONFIG` points to an mcp.json that all spawned agents will use by default.
 
 The MCP client spawns the server as a subprocess, so it doesn't inherit your shell environment. You'll need to set the same vars in both places if you use both interfaces.
 
@@ -144,6 +148,44 @@ The MCP client spawns the server as a subprocess, so it doesn't inherit your she
 - Create GitHub issues and PRs
 - Spawn sub-agents
 - Load custom tools dynamically
+- **Use MCP servers** for external tools (AWS docs, Perplexity, GitHub, etc.)
+
+## MCP Server Support
+
+Give agents access to external tools via MCP (Model Context Protocol). Uses the same config format as Kiro/Claude Desktop.
+
+**Option 1: Global default for all agents**
+```bash
+export CONTAINERIZED_AGENTS_MCP_CONFIG="~/.kiro/settings/mcp.json"
+containerized-strands-agents-webui
+```
+
+**Option 2: Per-agent via send_message**
+```python
+send_message(
+    agent_id="researcher",
+    message="Search for Lambda documentation",
+    mcp_config_file="~/.kiro/settings/mcp.json"
+)
+```
+
+**Option 3: Inline config**
+```python
+send_message(
+    agent_id="docs-agent",
+    message="What is S3?",
+    mcp_config={
+        "mcpServers": {
+            "aws-docs": {
+                "command": "uvx",
+                "args": ["awslabs.aws-documentation-mcp-server@latest"]
+            }
+        }
+    }
+)
+```
+
+MCP config is persisted per-agent - set it once and it's remembered.
 
 ## Next Steps
 

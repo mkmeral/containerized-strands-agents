@@ -285,6 +285,56 @@ class AgentManager:
             return prompt_file.read_text()
         return None
 
+    def _save_mcp_config(self, agent_id: str, mcp_config: dict, data_dir: str | None = None):
+        """Save MCP configuration for an agent."""
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
+        mcp_file = agent_dir / ".agent" / "mcp.json"
+        mcp_file.write_text(json.dumps(mcp_config, indent=2))
+        logger.info(f"Saved MCP config for agent {agent_id}")
+
+    def _load_mcp_config_from_file(self, file_path: str) -> dict:
+        """Load MCP configuration from a file on the host machine.
+        
+        Args:
+            file_path: Path to the mcp.json file on the host machine.
+            
+        Returns:
+            dict: MCP configuration.
+            
+        Raises:
+            FileNotFoundError: If the file doesn't exist.
+            ValueError: If the file is invalid JSON or missing required keys.
+        """
+        try:
+            file_path_obj = Path(file_path).expanduser().resolve()
+            if not file_path_obj.exists():
+                raise FileNotFoundError(f"MCP config file not found: {file_path}")
+            if not file_path_obj.is_file():
+                raise ValueError(f"Path is not a file: {file_path}")
+            
+            with open(file_path_obj, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # Validate it has the expected structure
+            if not isinstance(config, dict):
+                raise ValueError(f"MCP config must be a JSON object: {file_path}")
+            
+            # Accept both 'mcpServers' (Kiro/Claude format) and bare server configs
+            if "mcpServers" not in config and not any(
+                isinstance(v, dict) and ("command" in v or "url" in v)
+                for v in config.values()
+            ):
+                logger.warning(f"MCP config may be missing 'mcpServers' key: {file_path}")
+            
+            logger.info(f"Successfully loaded MCP config from file: {file_path}")
+            return config
+            
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in MCP config file {file_path}: {e}")
+        except Exception as e:
+            logger.error(f"Failed to load MCP config file {file_path}: {e}")
+            raise
+
     def _read_system_prompt_file(self, file_path: str) -> str:
         """Read system prompt from a file on the host machine.
         
@@ -364,6 +414,8 @@ class AgentManager:
         system_prompt_file: str | None = None,
         tools: list[str] | None = None,
         data_dir: str | None = None,
+        mcp_config: dict | None = None,
+        mcp_config_file: str | None = None,
     ) -> AgentInfo:
         """Get existing agent or create new one.
         
@@ -371,6 +423,11 @@ class AgentManager:
             data_dir: Optional custom data directory for this agent. If provided,
                      agent data will be stored there instead of the default location.
                      Useful for project-specific agents.
+            mcp_config: Optional MCP configuration dict (same format as Kiro/Claude Desktop mcp.json).
+                       If provided, persisted to agent's .agent/mcp.json.
+            mcp_config_file: Optional path to an mcp.json file on the host machine.
+                            If provided, the config is read and persisted to agent's .agent/mcp.json.
+                            Takes precedence over mcp_config if both are provided.
         """
         agent = self.tracker.get_agent(agent_id)
         
@@ -381,6 +438,24 @@ class AgentManager:
         
         # Use agent's stored data_dir or the provided one
         effective_data_dir = data_dir or (agent.data_dir if agent else None)
+        
+        # Handle MCP config with precedence: file > inline config
+        resolved_mcp_config = None
+        try:
+            if mcp_config_file:
+                # mcp_config_file takes precedence over mcp_config
+                resolved_mcp_config = self._load_mcp_config_from_file(mcp_config_file)
+                logger.info(f"Using MCP config from file {mcp_config_file} for agent {agent_id}")
+            elif mcp_config:
+                resolved_mcp_config = mcp_config
+                logger.info(f"Using provided MCP config for agent {agent_id}")
+        except Exception as e:
+            logger.error(f"Failed to process MCP config for agent {agent_id}: {e}")
+            raise ValueError(f"Failed to load MCP config: {e}")
+        
+        # Save MCP config if provided (always overwrite - allows updating MCP servers)
+        if resolved_mcp_config:
+            self._save_mcp_config(agent_id, resolved_mcp_config, effective_data_dir)
         
         # Handle system prompt with precedence: file > text > existing
         resolved_system_prompt = None
@@ -420,6 +495,11 @@ class AgentManager:
         if agent and agent.container_id:
             # Check if container is still running
             if self._is_container_running(agent.container_id):
+                # If MCP config was updated, restart the container to pick up changes
+                if resolved_mcp_config:
+                    logger.info(f"Restarting container for agent {agent_id} to apply MCP config changes")
+                    return await self._start_container(agent, aws_profile=aws_profile, aws_region=aws_region)
+                
                 agent.last_activity = datetime.now(timezone.utc).isoformat()
                 self.tracker.update_agent(agent)
                 return agent
@@ -566,6 +646,8 @@ class AgentManager:
         system_prompt_file: str | None = None,
         tools: list[str] | None = None,
         data_dir: str | None = None,
+        mcp_config: dict | None = None,
+        mcp_config_file: str | None = None,
     ) -> dict:
         """Send a message to an agent (fire-and-forget).
         
@@ -575,6 +657,11 @@ class AgentManager:
             data_dir: Optional custom data directory for this agent. If provided,
                      agent data will be stored there instead of the default location.
                      Useful for project-specific agents.
+            mcp_config: Optional MCP configuration dict (same format as Kiro/Claude Desktop mcp.json).
+                       If provided, persisted to agent's .agent/mcp.json.
+            mcp_config_file: Optional path to an mcp.json file on the host machine.
+                            If provided, the config is read and persisted to agent's .agent/mcp.json.
+                            Takes precedence over mcp_config if both are provided.
         """
         try:
             agent = await self.get_or_create_agent(
@@ -585,6 +672,8 @@ class AgentManager:
                 system_prompt_file=system_prompt_file,
                 tools=tools,
                 data_dir=data_dir,
+                mcp_config=mcp_config,
+                mcp_config_file=mcp_config_file,
             )
         except ValueError as e:
             # Handle system prompt file errors

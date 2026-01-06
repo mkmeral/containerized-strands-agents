@@ -19,6 +19,15 @@ from strands_tools import (
     load_tool,
 )
 
+# MCP imports
+try:
+    from mcp import stdio_client, StdioServerParameters
+    from mcp.client.sse import sse_client
+    from strands.tools.mcp import MCPClient
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+
 # GitHub tools are only available in Docker container
 try:
     from github_tools import (
@@ -153,6 +162,153 @@ def load_dynamic_tools(agent: Agent, tools_dir: Optional[Path] = None):
             logger.error(f"Failed to load tool {tool_file}: {e}")
 
 
+def load_mcp_config(data_dir: Path) -> dict:
+    """Load MCP configuration for an agent.
+    
+    Resolution order (highest to lowest priority):
+    1. Agent's persisted config: data_dir/.agent/mcp.json
+    2. Global default from env var: CONTAINERIZED_AGENTS_MCP_CONFIG
+    
+    Args:
+        data_dir: Path to the agent data directory
+        
+    Returns:
+        MCP configuration dict with 'mcpServers' key, or empty dict
+    """
+    # 1. Check agent's persisted config
+    agent_mcp_config = data_dir / ".agent" / "mcp.json"
+    if agent_mcp_config.exists():
+        try:
+            config = json.loads(agent_mcp_config.read_text())
+            logger.info(f"Loaded MCP config from {agent_mcp_config}")
+            return config
+        except Exception as e:
+            logger.error(f"Failed to load MCP config from {agent_mcp_config}: {e}")
+    
+    # 2. Check global default from env var
+    global_config_path = os.environ.get("CONTAINERIZED_AGENTS_MCP_CONFIG")
+    if global_config_path:
+        try:
+            config_path = Path(global_config_path).expanduser().resolve()
+            if config_path.exists():
+                config = json.loads(config_path.read_text())
+                logger.info(f"Loaded MCP config from global default: {config_path}")
+                return config
+        except Exception as e:
+            logger.error(f"Failed to load global MCP config from {global_config_path}: {e}")
+    
+    return {}
+
+
+def create_mcp_clients(mcp_config: dict) -> list:
+    """Create MCP clients from configuration and get their tools.
+    
+    Fails open: only returns tools from clients that successfully connect.
+    Clients that fail to start are logged and skipped.
+    
+    Args:
+        mcp_config: MCP configuration dict with 'mcpServers' key
+        
+    Returns:
+        List of tools from successfully connected MCP clients
+    """
+    if not MCP_AVAILABLE:
+        logger.warning("MCP not available - mcp package not installed")
+        return []
+    
+    servers = mcp_config.get("mcpServers", {})
+    if not servers:
+        return []
+    
+    all_tools = []
+    started_clients = []  # Track for cleanup on error
+    
+    for name, server_config in servers.items():
+        # Skip disabled servers
+        if server_config.get("disabled", False):
+            logger.info(f"Skipping disabled MCP server: {name}")
+            continue
+        
+        try:
+            # Resolve environment variables in env config
+            env = {}
+            for key, value in server_config.get("env", {}).items():
+                if isinstance(value, str):
+                    # Expand ${VAR} and $VAR patterns
+                    env[key] = os.path.expandvars(value)
+                else:
+                    env[key] = value
+            
+            # Determine transport type
+            transport_type = server_config.get("type", "stdio")
+            client = None
+            
+            if transport_type == "stdio" or "command" in server_config:
+                # stdio transport
+                command = server_config.get("command")
+                args = server_config.get("args", [])
+                
+                if not command:
+                    logger.error(f"MCP server {name} missing 'command'")
+                    continue
+                
+                # Create closure to capture server config
+                def make_stdio_client(cmd, arguments, environment):
+                    return lambda: stdio_client(
+                        StdioServerParameters(
+                            command=cmd,
+                            args=arguments,
+                            env=environment if environment else None,
+                        )
+                    )
+                
+                client = MCPClient(make_stdio_client(command, args, env))
+                
+            elif transport_type == "sse" or "url" in server_config:
+                # SSE transport
+                url = server_config.get("url")
+                if not url:
+                    logger.error(f"MCP server {name} missing 'url' for SSE transport")
+                    continue
+                
+                def make_sse_client(server_url):
+                    return lambda: sse_client(server_url)
+                
+                client = MCPClient(make_sse_client(url))
+                
+            else:
+                logger.warning(f"Unknown transport type for MCP server {name}: {transport_type}")
+                continue
+            
+            # Try to start the client and get tools (fail open)
+            if client:
+                try:
+                    client.start()
+                    tools = client.list_tools_sync()
+                    all_tools.extend(tools)
+                    started_clients.append(client)
+                    logger.info(f"Loaded {len(tools)} tools from MCP server: {name}")
+                except Exception as start_error:
+                    logger.warning(f"Failed to start MCP server {name}, skipping: {start_error}")
+                    try:
+                        client.stop()
+                    except Exception:
+                        pass
+                
+        except Exception as e:
+            logger.error(f"Failed to create MCP client for server {name}: {e}")
+    
+    # Store started clients for later cleanup (attach to module for now)
+    # This is a bit hacky but ensures clients stay alive
+    global _active_mcp_clients
+    _active_mcp_clients = started_clients
+    
+    return all_tools
+
+# Global to keep MCP clients alive
+_active_mcp_clients = []
+
+
 def create_agent(
     data_dir: Path,
     system_prompt: Optional[str] = None,
@@ -189,11 +345,17 @@ def create_agent(
         storage_dir=str(session_dir)
     )
     
+    # Load MCP configuration and create clients
+    mcp_config = load_mcp_config(data_dir)
+    mcp_tools = create_mcp_clients(mcp_config)
+    
     # Create agent with session manager and summarizing conversation manager
     base_tools = [file_read, file_write, editor, shell, use_agent, python_repl, load_tool]
+    all_tools = base_tools + GITHUB_TOOLS + mcp_tools
+    
     agent = Agent(
         system_prompt=prompt,
-        tools=base_tools + GITHUB_TOOLS,
+        tools=all_tools,
         session_manager=session_manager,
         conversation_manager=SummarizingConversationManager(
             summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed
@@ -202,6 +364,8 @@ def create_agent(
         model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     )
     logger.info(f"Agent initialized with session at {session_dir}")
+    if mcp_tools:
+        logger.info(f"Agent initialized with {len(mcp_tools)} MCP tools")
     
     # Load dynamic tools if tools directory is provided
     load_dynamic_tools(agent, tools_dir)

@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv for Python MCP servers (uvx command)
+RUN pip install uv
+
 # Copy requirements and install Python dependencies
 COPY docker/requirements.txt /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt

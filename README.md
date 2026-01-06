@@ -8,6 +8,7 @@ An MCP server that hosts isolated Strands AI agents in Docker containers. Each a
 - **Isolated Agents**: Each agent runs in its own Docker container
 - **Session Persistence**: Conversation history saved and restored across container restarts
 - **Custom System Prompts**: Configure per-agent system prompts via text or file
+- **MCP Server Support**: Connect agents to external tools via Model Context Protocol
 - **GitHub Integration**: Agents can push to repositories with scoped access tokens
 - **AWS Profile Support**: Pass different AWS profiles for different agents
 - **Retry Logic**: Automatic retry with exponential backoff for transient errors
@@ -78,12 +79,15 @@ Add to your MCP configuration (e.g., `~/.kiro/settings/mcp.json`):
       "command": "containerized-strands-agents-server",
       "env": {
         "CONTAINERIZED_AGENTS_GITHUB_TOKEN": "github_pat_xxxx",
+        "CONTAINERIZED_AGENTS_MCP_CONFIG": "/path/to/mcp.json",
         "AWS_BEARER_TOKEN_BEDROCK": "optional-bearer-token"
       }
     }
   }
 }
 ```
+
+The `CONTAINERIZED_AGENTS_MCP_CONFIG` env var sets a default mcp.json for all agents spawned by this server. You can point it to your existing Kiro config or a separate one.
 
 ### MCP Tools
 
@@ -106,6 +110,8 @@ send_message(
     system_prompt_file="/path/to/prompt",   # Optional (takes precedence over system_prompt)
     tools=["/path/to/tool.py"],             # Optional: per-agent tools
     data_dir="/path/to/project",            # Optional: custom data directory
+    mcp_config_file="~/.kiro/settings/mcp.json",  # Optional: path to MCP config
+    mcp_config={"mcpServers": {...}},       # Optional: inline MCP config
 )
 ```
 
@@ -224,6 +230,7 @@ These variables configure the MCP server. Set them either in your `mcp.json` (un
 | `AGENT_HOST_IDLE_TIMEOUT` | `720` | Minutes before idle container stops (12 hrs) |
 | `CONTAINERIZED_AGENTS_SYSTEM_PROMPTS` | - | Comma-separated paths to prompt files |
 | `CONTAINERIZED_AGENTS_TOOLS` | - | Path to global tools directory |
+| `CONTAINERIZED_AGENTS_MCP_CONFIG` | - | Path to default mcp.json for all agents |
 
 **Passed to Containers** (agents can use these):
 
@@ -280,8 +287,92 @@ Each agent has access to:
 - `use_agent` - Spawn sub-agents
 - `load_tool` - Dynamically load additional tools
 - GitHub tools - Create/update issues and PRs
+- **MCP tools** - Any tools from configured MCP servers
 
 **Important**: Agents work in `/data/workspace` inside the container. This directory persists across container restarts.
+
+## MCP Server Support
+
+Agents can connect to external MCP (Model Context Protocol) servers for additional tools. This uses the same config format as Kiro/Claude Desktop.
+
+### Quick Setup: Use Your Existing Config
+
+Point agents to your existing Kiro mcp.json:
+
+```bash
+# Set as default for all agents
+export CONTAINERIZED_AGENTS_MCP_CONFIG="~/.kiro/settings/mcp.json"
+containerized-strands-agents-webui
+```
+
+Or per-agent via MCP tool:
+```python
+send_message(
+    agent_id="researcher",
+    message="Search AWS docs for Lambda limits",
+    mcp_config_file="~/.kiro/settings/mcp.json"
+)
+```
+
+### Inline MCP Config
+
+```python
+send_message(
+    agent_id="docs-agent",
+    message="What is Amazon S3?",
+    mcp_config={
+        "mcpServers": {
+            "aws-docs": {
+                "command": "uvx",
+                "args": ["awslabs.aws-documentation-mcp-server@latest"]
+            },
+            "perplexity": {
+                "command": "npx",
+                "args": ["-y", "@anthropic-ai/mcp-server-perplexity"],
+                "env": {"PERPLEXITY_API_KEY": "pplx-xxx"}
+            }
+        }
+    }
+)
+```
+
+### Config Format
+
+Same as Kiro/Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "uvx",
+      "args": ["package-name@latest"],
+      "env": {"API_KEY": "..."},
+      "disabled": false
+    }
+  }
+}
+```
+
+### Configuration Precedence
+
+1. `mcp_config_file` param (path to mcp.json)
+2. `mcp_config` param (inline dict)  
+3. Agent's persisted config (`.agent/mcp.json`)
+4. `CONTAINERIZED_AGENTS_MCP_CONFIG` env var (global default)
+
+MCP config is persisted per-agent, so you only need to set it once. Subsequent messages to the same agent will use the saved config.
+
+### Supported Transports
+
+- **stdio** (default): Local command-line MCP servers via `uvx` or `npx`
+- **SSE**: Remote HTTP-based MCP servers
+
+### Notes
+
+- `uvx` and `npx` are pre-installed in containers - no need to install individual MCP servers
+- Environment variables in config (like `${GITHUB_TOKEN}`) are expanded at runtime
+- Disabled servers (`"disabled": true`) are skipped
+- **Fails open**: If an MCP server fails to connect, the agent still starts with other tools. Check container logs for connection errors.
 
 ## Data Persistence
 

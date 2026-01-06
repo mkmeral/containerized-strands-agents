@@ -89,7 +89,14 @@ def _build_send_message_docstring() -> str:
                These tools are loaded in addition to any global tools.
         data_dir: Custom data directory for this agent. If provided, agent data 
                   (workspace, session, tools) will be stored there instead of the 
-                  default location. Useful for project-specific agents."""
+                  default location. Useful for project-specific agents.
+        mcp_config: MCP server configuration dict (same format as Kiro/Claude Desktop).
+                    Example: {"mcpServers": {"github": {"command": "uvx", "args": ["mcp-server-github"]}}}
+                    Persisted to agent's .agent/mcp.json and used on subsequent messages.
+        mcp_config_file: Path to an existing mcp.json file on the host machine.
+                         The config is read and persisted to the agent's .agent/mcp.json.
+                         Takes precedence over mcp_config if both are provided.
+                         Tip: Point to your existing ~/.kiro/settings/mcp.json or similar."""
 
     # Get available system prompts
     available_prompts = _parse_system_prompts_env()
@@ -149,6 +156,8 @@ async def _send_message(
     system_prompt_file: str | None = None,
     tools: list[str] | None = None,
     data_dir: str | None = None,
+    mcp_config: dict | None = None,
+    mcp_config_file: str | None = None,
 ) -> dict:
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
@@ -163,6 +172,8 @@ async def _send_message(
         system_prompt_file=system_prompt_file,
         tools=tools,
         data_dir=data_dir,
+        mcp_config=mcp_config,
+        mcp_config_file=mcp_config_file,
     )
     return result
 

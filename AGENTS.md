@@ -241,6 +241,7 @@ Tests use `pytest-asyncio` with `asyncio_mode = "auto"` configured in `pyproject
 | `CONTAINERIZED_AGENTS_GITHUB_TOKEN` | — | GitHub PAT for git operations |
 | `CONTAINERIZED_AGENTS_SYSTEM_PROMPTS` | — | Comma-separated paths to prompt files |
 | `CONTAINERIZED_AGENTS_TOOLS` | — | Path to global tools directory |
+| `CONTAINERIZED_AGENTS_MCP_CONFIG` | — | Path to default mcp.json for all agents |
 | `OPENAI_API_KEY` | — | Passed to containers for OpenAI models |
 | `GOOGLE_API_KEY` | — | Passed to containers for Gemini models |
 | `AWS_BEARER_TOKEN_BEDROCK` | — | Cross-account Bedrock access |
@@ -251,6 +252,60 @@ Tests use `pytest-asyncio` with `asyncio_mode = "auto"` configured in `pyproject
 - `data_dir`: Custom data directory for project-specific agents
 - `aws_profile`: Different AWS credentials per agent
 - `aws_region`: Different Bedrock region per agent
+- `mcp_config`: MCP server configuration dict (same format as Kiro/Claude Desktop)
+- `mcp_config_file`: Path to existing mcp.json file on host
+
+**MCP Server Support:**
+
+Agents can connect to MCP (Model Context Protocol) servers for additional tools. Configuration uses the same format as Kiro/Claude Desktop:
+
+```json
+// data/agents/my-agent/.agent/mcp.json
+{
+  "mcpServers": {
+    "github": {
+      "command": "uvx",
+      "args": ["mcp-server-github"],
+      "env": {"GITHUB_TOKEN": "..."},
+      "disabled": false
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+    }
+  }
+}
+```
+
+Configuration precedence (highest to lowest):
+1. Per-agent `mcp_config_file` parameter (path to mcp.json)
+2. Per-agent `mcp_config` parameter (inline dict)
+3. Agent's persisted config (`.agent/mcp.json`)
+4. Global default (`CONTAINERIZED_AGENTS_MCP_CONFIG` env var)
+
+Example usage:
+```python
+# Point to existing Kiro config
+send_message(
+    agent_id="reviewer",
+    message="Review this PR",
+    mcp_config_file="~/.kiro/settings/mcp.json"
+)
+
+# Or inline config
+send_message(
+    agent_id="researcher",
+    message="Search for docs",
+    mcp_config={
+        "mcpServers": {
+            "aws-docs": {
+                "command": "uvx",
+                "args": ["awslabs.aws-documentation-mcp-server@latest"]
+            }
+        }
+    }
+)
+```
 
 **Adding New Tools:**
 1. Create `.py` file with `@tool` decorated functions (Strands tools format)

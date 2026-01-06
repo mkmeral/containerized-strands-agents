@@ -19,6 +19,10 @@ IDLE_TIMEOUT_MINUTES = int(os.getenv("AGENT_HOST_IDLE_TIMEOUT", "720"))  # 12 ho
 HEALTH_CHECK_INTERVAL_SECONDS = 60
 CONTAINER_STARTUP_TIMEOUT_SECONDS = 30
 
+# MCP Configuration
+# Path to default mcp.json file for all agents (can be overridden per-agent)
+MCP_CONFIG_FILE = os.getenv("CONTAINERIZED_AGENTS_MCP_CONFIG", "")
+
 # Agent system prompt
 SYSTEM_PROMPT = """You are a helpful AI assistant running in an isolated environment.
 
