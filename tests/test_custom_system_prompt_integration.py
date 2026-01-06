@@ -76,6 +76,12 @@ class TestCustomSystemPromptIntegration:
                         history1 = await manager.get_messages("custom-prompt-test", count=1)
                         assert history1["status"] == "success"
                         first_response = history1["messages"][-1]["content"]
+                        # Handle both string and list content formats
+                        if isinstance(first_response, list):
+                            first_response = " ".join(
+                                part.get("text", "") if isinstance(part, dict) else str(part)
+                                for part in first_response
+                            )
                         
                         # Should use custom system prompt
                         assert "CODE_REVIEW:" in first_response.upper()
@@ -103,6 +109,12 @@ class TestCustomSystemPromptIntegration:
                         history2 = await manager.get_messages("custom-prompt-test", count=1)
                         assert history2["status"] == "success"
                         second_response = history2["messages"][-1]["content"]
+                        # Handle both string and list content formats
+                        if isinstance(second_response, list):
+                            second_response = " ".join(
+                                part.get("text", "") if isinstance(part, dict) else str(part)
+                                for part in second_response
+                            )
                         
                         # Should still remember it's a code reviewer
                         assert "code review" in second_response.lower() or "CODE_REVIEW:" in second_response.upper()
@@ -163,6 +175,12 @@ class TestCustomSystemPromptIntegration:
                         history = await manager.get_messages("existing-agent-test", count=1)
                         assert history["status"] == "success"
                         response = history["messages"][-1]["content"]
+                        # Handle both string and list content formats
+                        if isinstance(response, list):
+                            response = " ".join(
+                                part.get("text", "") if isinstance(part, dict) else str(part)
+                                for part in response
+                            )
                         
                         # Should still be using the first (math) system prompt, not the cooking one
                         # The agent should remember it's a math tutor, not switch to cooking
@@ -206,7 +224,14 @@ class TestCustomSystemPromptIntegration:
                         # Get response
                         history = await manager.get_messages("default-prompt-test", count=1)
                         assert history["status"] == "success"
-                        response = history["messages"][-1]["content"].lower()
+                        response = history["messages"][-1]["content"]
+                        # Handle both string and list content formats
+                        if isinstance(response, list):
+                            response = " ".join(
+                                part.get("text", "") if isinstance(part, dict) else str(part)
+                                for part in response
+                            )
+                        response = response.lower()
                         
                         # Should mention tools from default system prompt
                         assert any(tool in response for tool in ["file_read", "shell", "python", "editor"])

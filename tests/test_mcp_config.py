@@ -93,34 +93,46 @@ class TestMCPConfig:
     @pytest.mark.asyncio
     async def test_get_or_create_agent_with_mcp_config(self, agent_manager, temp_dir):
         """Test creating agent with inline MCP config."""
+        from containerized_strands_agents.agent_manager import AgentInfo
+        
         with patch("containerized_strands_agents.agent_manager.AGENTS_DIR", temp_dir / "agents"):
-            with patch.object(agent_manager, "_create_agent", new_callable=AsyncMock) as mock_create:
-                mock_create.return_value = MagicMock(
-                    agent_id="test-agent",
-                    container_id="abc123",
-                    status="running"
-                )
-                
-                mcp_config = {
-                    "mcpServers": {
-                        "test-server": {"command": "echo", "args": ["hello"]}
+            # Mock both _create_agent and _start_container to avoid Docker calls
+            with patch.object(agent_manager, "_start_container", new_callable=AsyncMock) as mock_start:
+                with patch.object(agent_manager, "_create_agent", new_callable=AsyncMock) as mock_create:
+                    result_agent = AgentInfo(
+                        agent_id="test-agent",
+                        container_id="abc123",
+                        container_name="agent-test-agent",
+                        port=9000,
+                        status="running",
+                        created_at="2024-01-01T00:00:00Z",
+                        last_activity="2024-01-01T00:00:00Z",
+                    )
+                    mock_create.return_value = result_agent
+                    mock_start.return_value = result_agent
+                    
+                    mcp_config = {
+                        "mcpServers": {
+                            "test-server": {"command": "echo", "args": ["hello"]}
+                        }
                     }
-                }
-                
-                await agent_manager.get_or_create_agent(
-                    "test-agent",
-                    mcp_config=mcp_config
-                )
-                
-                # Verify MCP config was saved
-                mcp_file = temp_dir / "agents" / "test-agent" / ".agent" / "mcp.json"
-                assert mcp_file.exists()
-                saved_config = json.loads(mcp_file.read_text())
-                assert saved_config == mcp_config
+                    
+                    await agent_manager.get_or_create_agent(
+                        "test-agent",
+                        mcp_config=mcp_config
+                    )
+                    
+                    # Verify MCP config was saved
+                    mcp_file = temp_dir / "agents" / "test-agent" / ".agent" / "mcp.json"
+                    assert mcp_file.exists()
+                    saved_config = json.loads(mcp_file.read_text())
+                    assert saved_config == mcp_config
 
     @pytest.mark.asyncio
     async def test_get_or_create_agent_with_mcp_config_file(self, agent_manager, temp_dir):
         """Test creating agent with MCP config file path."""
+        from containerized_strands_agents.agent_manager import AgentInfo
+        
         # Create a test mcp.json file
         mcp_file = temp_dir / "my_mcp.json"
         mcp_config = {
@@ -131,23 +143,31 @@ class TestMCPConfig:
         mcp_file.write_text(json.dumps(mcp_config))
         
         with patch("containerized_strands_agents.agent_manager.AGENTS_DIR", temp_dir / "agents"):
-            with patch.object(agent_manager, "_create_agent", new_callable=AsyncMock) as mock_create:
-                mock_create.return_value = MagicMock(
-                    agent_id="test-agent",
-                    container_id="abc123",
-                    status="running"
-                )
-                
-                await agent_manager.get_or_create_agent(
-                    "test-agent",
-                    mcp_config_file=str(mcp_file)
-                )
-                
-                # Verify MCP config was saved to agent directory
-                agent_mcp_file = temp_dir / "agents" / "test-agent" / ".agent" / "mcp.json"
-                assert agent_mcp_file.exists()
-                saved_config = json.loads(agent_mcp_file.read_text())
-                assert saved_config == mcp_config
+            # Mock both _create_agent and _start_container to avoid Docker calls
+            with patch.object(agent_manager, "_start_container", new_callable=AsyncMock) as mock_start:
+                with patch.object(agent_manager, "_create_agent", new_callable=AsyncMock) as mock_create:
+                    result_agent = AgentInfo(
+                        agent_id="test-agent",
+                        container_id="abc123",
+                        container_name="agent-test-agent",
+                        port=9000,
+                        status="running",
+                        created_at="2024-01-01T00:00:00Z",
+                        last_activity="2024-01-01T00:00:00Z",
+                    )
+                    mock_create.return_value = result_agent
+                    mock_start.return_value = result_agent
+                    
+                    await agent_manager.get_or_create_agent(
+                        "test-agent",
+                        mcp_config_file=str(mcp_file)
+                    )
+                    
+                    # Verify MCP config was saved to agent directory
+                    agent_mcp_file = temp_dir / "agents" / "test-agent" / ".agent" / "mcp.json"
+                    assert agent_mcp_file.exists()
+                    saved_config = json.loads(agent_mcp_file.read_text())
+                    assert saved_config == mcp_config
 
 
 class TestAgentMCPLoading:
@@ -225,8 +245,10 @@ class TestAgentMCPLoading:
         agent_dir = temp_dir / "agent"
         (agent_dir / ".agent").mkdir(parents=True)
         
-        loaded = load_mcp_config(agent_dir)
-        assert loaded == {}
+        # Clear env var to ensure we test the "no config" case
+        with patch.dict(os.environ, {"CONTAINERIZED_AGENTS_MCP_CONFIG": ""}, clear=False):
+            loaded = load_mcp_config(agent_dir)
+            assert loaded == {}
 
     def test_create_mcp_clients_disabled_server(self, temp_dir):
         """Test that disabled MCP servers are skipped."""
