@@ -1,0 +1,21 @@
+# Include documentation
+include README.md
+include LICENSE
+include AGENTS.md
+include GETTING_STARTED.md
+
+# Include package data
+recursive-include src *.py
+recursive-include ui *.py *.html
+recursive-include docker *.py *.txt Dockerfile
+recursive-include templates *.yml
+recursive-include scripts *.sh
+
+# Include tests
+recursive-include tests *.py
+
+# Exclude compiled files
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude .DS_Store

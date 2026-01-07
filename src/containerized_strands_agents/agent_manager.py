@@ -136,13 +136,15 @@ class AgentManager:
 
     def _build_image(self):
         """Build the agent runner Docker image."""
-        # Find the docker directory relative to this file
-        # Path: src/containerized_strands_agents/agent_manager.py -> ../.. -> project_root/docker
-        docker_dir = Path(__file__).parent.parent.parent / "docker"
+        # Find the docker directory - check installed package location first, then dev location
+        docker_dir = Path(__file__).parent / "docker"
+        if not docker_dir.exists():
+            # Fallback to development layout
+            docker_dir = Path(__file__).parent.parent.parent / "docker"
         
         if not docker_dir.exists():
             raise RuntimeError(
-                f"Docker directory not found at {docker_dir}. "
+                f"Docker directory not found. "
                 f"Please run ./scripts/build_docker.sh manually."
             )
         
@@ -245,11 +247,14 @@ class AgentManager:
         agent_dir = self._get_agent_dir(agent_id, data_dir)
         runner_dir = agent_dir / ".agent" / "runner"
         
-        # Find the docker directory relative to this file
-        docker_dir = Path(__file__).parent.parent.parent / "docker"
+        # Find the docker directory - check installed package location first, then dev location
+        docker_dir = Path(__file__).parent / "docker"
+        if not docker_dir.exists():
+            # Fallback to development layout
+            docker_dir = Path(__file__).parent.parent.parent / "docker"
         
         if not docker_dir.exists():
-            logger.warning(f"Docker directory not found at {docker_dir}")
+            logger.warning(f"Docker directory not found")
             return
         
         try:
