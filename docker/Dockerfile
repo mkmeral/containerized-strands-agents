@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Configure git to disable pager (prevents hanging on git log, diff, etc.)
+RUN git config --global core.pager ''
+
 # Install uv for Python MCP servers (uvx command)
 RUN pip install uv
 
