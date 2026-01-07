@@ -6,7 +6,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 authors = [
-    {name = "Murat Kaan Meral", email = "mkmeral@amazon.com"}
+    {name = "Murat Kaan Meral", email = "muratkaanmeral@gmail.com"}
 ]
 keywords = ["mcp", "strands", "agents", "docker", "ai", "llm", "bedrock", "claude"]
 classifiers = [
