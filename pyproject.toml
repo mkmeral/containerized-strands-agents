@@ -22,6 +22,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "strands-agents>=0.1.0",
     "fastmcp>=2.0.0",
     "docker>=7.0.0",
     "httpx>=0.27.0",
