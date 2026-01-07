@@ -18,6 +18,8 @@ task execution while the host manages container lifecycle, idle timeouts, and se
 - `ui/` — Optional web UI: FastAPI REST wrapper and HTML interface
 - `scripts/` — Shell scripts for building Docker image and running the server
 - `tests/` — Unit, integration, and end-to-end tests using pytest
+- `templates/` — GitHub Actions workflow template for running agents in CI
+- `.github/workflows/` — CI and PyPI publishing workflows
 - `data/` — Runtime persistence (gitignored): agent workspaces, sessions, task registry
 
 ## Build & Development Commands
@@ -28,6 +30,13 @@ pip install -e ".[dev]"
 
 # Install with web UI support
 pip install -e ".[webui]"
+
+# Or use Makefile
+make dev              # Install with all dependencies
+make test             # Run unit tests
+make test-all         # Run all tests (requires Docker)
+make build            # Build wheel and sdist
+make docker           # Build Docker image
 
 # Build Docker image (auto-built on first use, or manually)
 ./scripts/build_docker.sh
@@ -190,6 +199,33 @@ python -m pytest tests/ --cov=src/containerized_strands_agents --cov-report=html
 
 Tests use `pytest-asyncio` with `asyncio_mode = "auto"` configured in `pyproject.toml`.
 
+## CI/CD & Publishing
+
+**GitHub Actions Workflows:**
+- `.github/workflows/ci.yml` — Runs tests on push/PR (Python 3.11-3.13)
+- `.github/workflows/publish.yml` — Publishes to PyPI on GitHub release
+
+**Publishing to PyPI:**
+
+Via GitHub (recommended):
+1. Update version in `pyproject.toml` and `src/containerized_strands_agents/__init__.py`
+2. Create a GitHub release with tag matching version (e.g., `v0.1.0`)
+3. Publish workflow runs automatically
+
+Via local commands:
+```bash
+make build            # Build wheel and sdist
+make publish-test     # Publish to TestPyPI (for testing)
+make publish          # Publish to PyPI
+```
+
+**PyPI Trusted Publisher Setup:**
+1. Go to repo Settings → Environments → Create "pypi"
+2. Go to PyPI → Account → Publishing → Add trusted publisher:
+   - Owner: `mkmeral`
+   - Repository: `containerized-strands-agents`
+   - Workflow: `publish.yml`
+
 ## Security & Compliance
 
 **Secrets Handling:**
@@ -247,6 +283,7 @@ Tests use `pytest-asyncio` with `asyncio_mode = "auto"` configured in `pyproject
 | `AWS_BEARER_TOKEN_BEDROCK` | — | Cross-account Bedrock access |
 
 **Per-Agent Customization:**
+- `description`: Brief description of the agent's purpose (shown in list_agents and web UI)
 - `system_prompt`: Custom instructions via text or file path
 - `tools`: List of `.py` files to load as additional Strands tools
 - `data_dir`: Custom data directory for project-specific agents
