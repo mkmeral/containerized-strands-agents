@@ -78,27 +78,27 @@ def load_system_prompt(data_dir: Path, custom_system_prompt: Optional[str] = Non
     """
     # If custom prompt is provided directly, use it
     if custom_system_prompt:
-        return custom_system_prompt
-    
-    # Try to load from file if enabled
-    custom_prompt_file = data_dir / ".agent" / "system_prompt.txt"
-    if os.getenv("CUSTOM_SYSTEM_PROMPT") == "true" and custom_prompt_file.exists():
-        try:
-            base_prompt = custom_prompt_file.read_text()
-            logger.info("Using custom system prompt from file")
-        except Exception as e:
-            logger.error(f"Failed to load custom system prompt: {e}")
-            logger.info("Falling back to default system prompt")
-            base_prompt = None
+        base_prompt = custom_system_prompt
     else:
-        base_prompt = None
+        # Try to load from file if enabled
+        custom_prompt_file = data_dir / ".agent" / "system_prompt.txt"
+        if os.getenv("CUSTOM_SYSTEM_PROMPT") == "true" and custom_prompt_file.exists():
+            try:
+                base_prompt = custom_prompt_file.read_text()
+                logger.info("Using custom system prompt from file")
+            except Exception as e:
+                logger.error(f"Failed to load custom system prompt: {e}")
+                logger.info("Falling back to default system prompt")
+                base_prompt = None
+        else:
+            base_prompt = None
     
-    if not base_prompt:
-        # Detect if running in Docker (data_dir starts with /data)
-        is_docker = str(data_dir).startswith("/data")
-        workspace_path = str(data_dir / "workspace") if is_docker else str(data_dir / "workspace")
-        
-        base_prompt = f"""You are a helpful AI assistant{"" if not is_docker else " running in an isolated Docker container"}.
+        if not base_prompt:
+            # Detect if running in Docker (data_dir starts with /data)
+            is_docker = str(data_dir).startswith("/data")
+            workspace_path = str(data_dir / "workspace") if is_docker else str(data_dir / "workspace")
+            
+            base_prompt = f"""You are a helpful AI assistant{"" if not is_docker else " running in an isolated Docker container"}.
 
 IMPORTANT: Your persistent workspace is {workspace_path}. ALWAYS work in this directory.
 - Clone repos here: cd {workspace_path} && git clone ...
@@ -120,7 +120,7 @@ When given a task:
 4. Commit with clear messages
 """
     
-    # Append environment capabilities if any
+    # Always append environment capabilities if any (even for custom prompts)
     capabilities = get_env_capabilities()
     if capabilities:
         base_prompt += f"\n\nEnvironment capabilities:\n{capabilities}"
