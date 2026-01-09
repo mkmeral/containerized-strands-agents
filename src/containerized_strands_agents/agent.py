@@ -120,6 +120,21 @@ When given a task:
 4. Commit with clear messages
 """
     
+    # Always append workspace info for custom prompts (they need to know where to work)
+    is_docker = str(data_dir).startswith("/data")
+    workspace_path = str(data_dir / "workspace") if is_docker else str(data_dir / "workspace")
+    
+    # Only add workspace info if it's a custom prompt (default already has it)
+    if custom_system_prompt or (os.getenv("CUSTOM_SYSTEM_PROMPT") == "true"):
+        base_prompt += f"""
+
+## Workspace Information
+- Your persistent workspace is: {workspace_path}
+- ALWAYS work in this directory - files here persist across sessions
+- Do NOT use /tmp or other directories - they will be lost
+- Clone repos, create files, and do all work in {workspace_path}
+"""
+    
     # Always append environment capabilities if any (even for custom prompts)
     capabilities = get_env_capabilities()
     if capabilities:
