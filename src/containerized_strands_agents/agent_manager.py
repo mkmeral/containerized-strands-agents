@@ -60,6 +60,7 @@ class AgentInfo(BaseModel):
     status: str  # running, stopped, error
     created_at: str
     last_activity: str
+    last_read: Optional[str] = None  # Timestamp when messages were last read
     data_dir: Optional[str] = None  # Custom data directory for this agent
     description: Optional[str] = None  # Brief description of the agent's purpose
 
@@ -747,7 +748,7 @@ class AgentManager:
                 pass
         return False
 
-    async def get_messages(self, agent_id: str, count: int = 1, include_tool_messages: bool = False) -> dict:
+    async def get_messages(self, agent_id: str, count: int = 1, include_tool_messages: bool = False, update_last_read: bool = True) -> dict:
         """Get messages from an agent's history.
         
         Args:
@@ -755,11 +756,18 @@ class AgentManager:
             count: Number of messages to retrieve.
             include_tool_messages: If True, include tool_use and tool_result messages.
                                   Defaults to False to avoid large payloads.
+            update_last_read: If True, update the last_read timestamp. Defaults to True.
+                             Set to False for preview/inbox queries.
         """
         agent = self.tracker.get_agent(agent_id)
         
         if not agent:
             return {"status": "error", "error": f"Agent {agent_id} not found"}
+        
+        # Update last_read timestamp if requested
+        if update_last_read:
+            agent.last_read = datetime.now(timezone.utc).isoformat()
+            self.tracker.update_agent(agent)
 
         # Check processing state from container
         processing = await self._get_agent_processing_state(agent)
@@ -860,6 +868,20 @@ class AgentManager:
             
             # Get processing state from container health endpoint
             agent_data["processing"] = await self._get_agent_processing_state(agent)
+            
+            # Calculate has_unread: true if last_activity > last_read (or never read)
+            has_unread = False
+            if agent.last_activity:
+                if not agent.last_read:
+                    has_unread = True
+                else:
+                    try:
+                        last_activity_dt = datetime.fromisoformat(agent.last_activity)
+                        last_read_dt = datetime.fromisoformat(agent.last_read)
+                        has_unread = last_activity_dt > last_read_dt
+                    except (ValueError, TypeError):
+                        has_unread = False
+            agent_data["has_unread"] = has_unread
             
             result.append(agent_data)
         
