@@ -376,7 +376,7 @@ def create_agent(
             summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed
             preserve_recent_messages=10,  # Always keep 10 most recent messages
         ),
-        model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        model="global.anthropic.claude-opus-4-5-20251101-v1:0",
     )
     logger.info(f"Agent initialized with session at {session_dir}")
     if mcp_tools:
