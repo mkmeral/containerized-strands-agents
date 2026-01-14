@@ -210,16 +210,24 @@ async def get_messages(agent_id: str, count: int = 1, include_tool_messages: boo
 
 
 @mcp.tool
-async def list_agents() -> dict:
+async def list_agents(unread_only: bool = False) -> dict:
     """List all agents and their current status.
     
+    Args:
+        unread_only: If True, only return agents with unread messages.
+                    Useful for checking which agents have new responses.
+    
     Returns:
-        dict with list of agents including id, status, data_dir, and last activity.
+        dict with list of agents including id, status, data_dir, has_unread, and last activity.
     """
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
     
     agents = await agent_manager.list_agents()
+    
+    if unread_only:
+        agents = [a for a in agents if a.get("has_unread", False)]
+    
     return {"status": "success", "agents": agents}
 
 
