@@ -748,7 +748,82 @@ class AgentManager:
                 pass
         return False
 
-    async def get_messages(self, agent_id: str, count: int = 1, include_tool_messages: bool = False, update_last_read: bool = True) -> dict:
+    def _read_messages_from_disk(self, agent_id: str, data_dir: str | None, count: int, include_tool_messages: bool) -> list[dict]:
+        """Read messages from FileSessionManager storage on disk.
+        
+        Args:
+            agent_id: The agent ID.
+            data_dir: Optional custom data directory.
+            count: Number of messages to retrieve.
+            include_tool_messages: If True, include tool_use and tool_result messages.
+            
+        Returns:
+            List of messages read from disk, or empty list if none found.
+        """
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
+        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        
+        if not messages_dir.exists():
+            return []
+        
+        try:
+            # Read all message files and sort by index
+            message_files = sorted(
+                messages_dir.glob("message_*.json"),
+                key=lambda f: int(f.stem.split("_")[1])
+            )
+            messages = []
+            for msg_file in message_files:
+                msg_data = json.loads(msg_file.read_text())
+                # FileSessionManager wraps message under "message" key
+                actual_message = msg_data.get("message", msg_data)
+                messages.append(actual_message)
+            
+            # Filter out tool messages unless requested
+            if not include_tool_messages:
+                filtered = []
+                for msg in messages:
+                    role = msg.get("role")
+                    content = msg.get("content", [])
+                    
+                    # Skip user messages that are tool results
+                    if role == "user" and isinstance(content, list):
+                        has_tool_result = any(
+                            isinstance(item, dict) and item.get("type") == "tool_result"
+                            for item in content
+                        )
+                        if has_tool_result:
+                            continue
+                    
+                    # Skip assistant messages that only contain tool_use
+                    if role == "assistant" and isinstance(content, list):
+                        has_tool_use = any(
+                            isinstance(item, dict) and item.get("type") == "tool_use"
+                            for item in content
+                        )
+                        has_text = any(
+                            isinstance(item, dict) and item.get("type") == "text" and item.get("text", "").strip()
+                            for item in content
+                        )
+                        if has_tool_use and not has_text:
+                            continue
+                    
+                    filtered.append(msg)
+                messages = filtered
+            
+            return messages[-count:] if count > 0 else messages
+        except Exception as e:
+            logger.error(f"Failed to read session file for agent {agent_id}: {e}")
+            return []
+
+    async def get_messages(
+        self, 
+        agent_id: str, 
+        count: int = 1, 
+        include_tool_messages: bool = False, 
+        update_last_read: bool = True,
+        auto_restart: bool = False,
+    ) -> dict:
         """Get messages from an agent's history.
         
         Args:
@@ -758,6 +833,20 @@ class AgentManager:
                                   Defaults to False to avoid large payloads.
             update_last_read: If True, update the last_read timestamp. Defaults to True.
                              Set to False for preview/inbox queries.
+            auto_restart: If True and container is stopped, automatically restart it
+                         before fetching messages. Defaults to False.
+                         
+        Returns:
+            dict with:
+            - status: "success" or "error"
+            - agent_id: The agent ID
+            - container_id: Container ID if available
+            - container_status: "running", "stopped", or "not_found"
+            - data_dir: Agent's data directory
+            - processing: Whether agent is currently processing
+            - source: "container" or "disk" - where messages were read from
+            - messages: List of messages
+            - restart_hint: (only when stopped) Hint about how to restart
         """
         agent = self.tracker.get_agent(agent_id)
         
@@ -769,87 +858,73 @@ class AgentManager:
             agent.last_read = datetime.now(timezone.utc).isoformat()
             self.tracker.update_agent(agent)
 
-        # Check processing state from container
-        processing = await self._get_agent_processing_state(agent)
+        # Determine container status
+        container_running = agent.container_id and self._is_container_running(agent.container_id)
+        container_status = "running" if container_running else ("stopped" if agent.container_id else "not_found")
+        
+        # Auto-restart if requested and container is not running
+        if auto_restart and not container_running and agent.container_id:
+            logger.info(f"Auto-restarting container for agent {agent_id} (requested via auto_restart=True)")
+            try:
+                agent = await self._start_container(agent)
+                if agent and agent.status == "running":
+                    container_running = True
+                    container_status = "running"
+                    logger.info(f"Successfully auto-restarted container for agent {agent_id}")
+                else:
+                    logger.warning(f"Failed to auto-restart container for agent {agent_id}")
+            except Exception as e:
+                logger.error(f"Error auto-restarting container for agent {agent_id}: {e}")
+
+        # Check processing state from container (only if running)
+        processing = await self._get_agent_processing_state(agent) if container_running else False
 
         # Base response with agent info
         base_response = {
             "status": "success",
             "agent_id": agent_id,
             "container_id": agent.container_id,
+            "container_status": container_status,
             "data_dir": agent.data_dir,
             "processing": processing,
         }
 
         # If container is running, get from API
-        if agent.container_id and self._is_container_running(agent.container_id):
+        if container_running:
             url = f"http://localhost:{agent.port}/history"
             async with httpx.AsyncClient() as client:
                 try:
                     resp = await client.get(url, params={"count": count, "include_tool_messages": include_tool_messages})
                     resp.raise_for_status()
                     data = resp.json()
-                    return {**base_response, "messages": data.get("messages", [])}
+                    return {
+                        **base_response, 
+                        "messages": data.get("messages", []),
+                        "source": "container",
+                    }
                 except Exception as e:
-                    logger.error(f"Failed to get messages from agent {agent_id}: {e}")
+                    logger.error(f"Failed to get messages from agent {agent_id} container: {e}")
+                    # Fall through to disk fallback
 
-        # Fallback: read from FileSessionManager storage
-        # FileSessionManager stores messages in: .agent/session/agents/agent_default/messages/
-        # Each file has structure: {"message": {...}, "message_id": N, ...}
-        agent_dir = self._get_agent_dir(agent_id, agent.data_dir)
-        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
-        if messages_dir.exists():
-            try:
-                # Read all message files and sort by index
-                message_files = sorted(
-                    messages_dir.glob("message_*.json"),
-                    key=lambda f: int(f.stem.split("_")[1])
-                )
-                messages = []
-                for msg_file in message_files:
-                    msg_data = json.loads(msg_file.read_text())
-                    # FileSessionManager wraps message under "message" key
-                    actual_message = msg_data.get("message", msg_data)
-                    messages.append(actual_message)
-                
-                # Filter out tool messages unless requested
-                if not include_tool_messages:
-                    filtered = []
-                    for msg in messages:
-                        role = msg.get("role")
-                        content = msg.get("content", [])
-                        
-                        # Skip user messages that are tool results
-                        if role == "user" and isinstance(content, list):
-                            has_tool_result = any(
-                                isinstance(item, dict) and item.get("type") == "tool_result"
-                                for item in content
-                            )
-                            if has_tool_result:
-                                continue
-                        
-                        # Skip assistant messages that only contain tool_use
-                        if role == "assistant" and isinstance(content, list):
-                            has_tool_use = any(
-                                isinstance(item, dict) and item.get("type") == "tool_use"
-                                for item in content
-                            )
-                            has_text = any(
-                                isinstance(item, dict) and item.get("type") == "text" and item.get("text", "").strip()
-                                for item in content
-                            )
-                            if has_tool_use and not has_text:
-                                continue
-                        
-                        filtered.append(msg)
-                    messages = filtered
-                
-                result = messages[-count:] if count > 0 else messages
-                return {**base_response, "messages": result}
-            except Exception as e:
-                logger.error(f"Failed to read session file for agent {agent_id}: {e}")
-
-        return {**base_response, "messages": []}
+        # Fallback: read from FileSessionManager storage on disk
+        messages = self._read_messages_from_disk(agent_id, agent.data_dir, count, include_tool_messages)
+        
+        response = {
+            **base_response,
+            "messages": messages,
+            "source": "disk",
+        }
+        
+        # Add restart hint when container is stopped
+        if container_status == "stopped":
+            response["restart_hint"] = (
+                f"Container is stopped. Messages were read from disk. "
+                f"To restart the container, either: "
+                f"1) Call get_messages with auto_restart=True, or "
+                f"2) Send a new message to the agent using send_message."
+            )
+        
+        return response
 
     async def list_agents(self) -> list[dict]:
         """List all agents with their status."""

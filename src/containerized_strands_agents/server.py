@@ -188,7 +188,12 @@ send_message = mcp.tool(name="send_message")(_send_message)
 
 
 @mcp.tool
-async def get_messages(agent_id: str, count: int = 1, include_tool_messages: bool = False) -> dict:
+async def get_messages(
+    agent_id: str, 
+    count: int = 1, 
+    include_tool_messages: bool = False,
+    auto_restart: bool = False,
+) -> dict:
     """Get the latest messages from an agent's conversation history.
 
     IMPORTANT: Do not poll this endpoint repeatedly. Use it on-demand when you
@@ -199,14 +204,27 @@ async def get_messages(agent_id: str, count: int = 1, include_tool_messages: boo
         count: Number of messages to retrieve (default: 1, returns last message).
         include_tool_messages: If True, include tool_use and tool_result messages.
                               Defaults to False to keep responses smaller.
+        auto_restart: If True and the agent's container is stopped, automatically
+                     restart it before fetching messages. Defaults to False.
+                     Use this when you need to ensure you're getting the latest
+                     state from a running container.
 
     Returns:
-        dict with status, messages, agent's data_dir path, and processing state.
+        dict with:
+        - status: "success" or "error"
+        - agent_id: The agent identifier
+        - container_id: Docker container ID (if exists)
+        - container_status: "running", "stopped", or "not_found"
+        - data_dir: Agent's data directory path
+        - processing: Whether the agent is currently processing a request
+        - source: "container" or "disk" - indicates where messages were read from
+        - messages: List of conversation messages
+        - restart_hint: (only when stopped) Instructions for restarting the container
     """
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
     
-    return await agent_manager.get_messages(agent_id, count, include_tool_messages)
+    return await agent_manager.get_messages(agent_id, count, include_tool_messages, auto_restart=auto_restart)
 
 
 @mcp.tool
