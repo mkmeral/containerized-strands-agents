@@ -196,8 +196,19 @@ async def get_messages(
 ) -> dict:
     """Get the latest messages from an agent's conversation history.
 
-    IMPORTANT: Do not poll this endpoint repeatedly. Use it on-demand when you
-    need to check an agent's response, not in a loop.
+    CRITICAL - CONTEXT BLOAT WARNING:
+    Each call returns large message payloads that consume your context window.
+    Repeated calls will quickly exhaust context and degrade your performance.
+    
+    RULES:
+    1. NEVER call immediately after send_message - agents need minutes to hours
+    2. NEVER call multiple times in a row to check completion status
+    3. NEVER poll in a loop waiting for processing=False
+    4. Call ONCE only when user explicitly asks to check on an agent
+    5. If processing=True, tell user "agent is still working" and STOP
+    
+    BAD: send_message() -> get_messages() -> get_messages() -> get_messages()
+    GOOD: send_message() -> [other work] -> user asks -> get_messages() once
 
     Args:
         agent_id: The agent to get messages from.

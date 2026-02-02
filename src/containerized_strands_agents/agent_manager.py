@@ -761,7 +761,8 @@ class AgentManager:
             List of messages read from disk, or empty list if none found.
         """
         agent_dir = self._get_agent_dir(agent_id, data_dir)
-        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        # FileSessionManager stores messages at: .agent/session/session_agent/agents/agent_default/messages/
+        messages_dir = agent_dir / ".agent" / "session" / "session_agent" / "agents" / "agent_default" / "messages"
         
         if not messages_dir.exists():
             return []
