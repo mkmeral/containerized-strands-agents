@@ -815,10 +815,14 @@
         let messagesInterval = null;
         let allAgents = []; // Store all agents for filtering
         let inboxItems = []; // Store inbox items
+        let lastMessagesHash = null; // Track message changes to avoid unnecessary re-renders
+        let lastAgentsHash = null; // Track agent list changes
+        let lastInboxHash = null; // Track inbox changes
         
         // Show inbox view
         function showInbox() {
             currentAgentId = null;
+            lastMessagesHash = null; // Reset messages hash
             
             // Remove new agent form if open
             const newAgentForm = document.getElementById('new-agent-form');
@@ -835,15 +839,21 @@
             // Clear agent selection in sidebar
             renderAgents(getFilteredAndSortedAgents());
             
-            // Load inbox
-            loadInbox();
+            // Load inbox (force render when explicitly showing)
+            loadInbox(true);
         }
         
         // Auto-refresh every 3 seconds
         function startAutoRefresh() {
             refreshInterval = setInterval(() => {
                 loadAgents();
-                loadInboxData(); // Just update data, not full render
+                // Only refresh inbox view if it's visible
+                const inboxView = document.getElementById('inbox-view');
+                if (inboxView && inboxView.style.display !== 'none') {
+                    loadInbox();
+                } else {
+                    loadInboxData(); // Just update badge count
+                }
                 if (currentAgentId) {
                     loadMessages(currentAgentId);
                 }
@@ -859,6 +869,17 @@
                 clearInterval(messagesInterval);
                 messagesInterval = null;
             }
+        }
+        
+        // Simple hash function for change detection
+        function simpleHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            return hash;
         }
         
         // Load inbox data (for badge updates)
@@ -877,14 +898,19 @@
         }
         
         // Load and render inbox
-        async function loadInbox() {
+        async function loadInbox(forceRender = false) {
             try {
                 const response = await fetch('/inbox');
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    inboxItems = data.items;
-                    renderInbox(inboxItems);
+                    // Check if inbox has changed before re-rendering
+                    const newHash = simpleHash(JSON.stringify(data.items));
+                    if (forceRender || newHash !== lastInboxHash) {
+                        inboxItems = data.items;
+                        lastInboxHash = newHash;
+                        renderInbox(inboxItems);
+                    }
                     updateUnreadCount();
                 } else {
                     showError('Failed to load inbox');
@@ -964,8 +990,13 @@
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    allAgents = data.agents; // Store all agents
-                    renderAgents(getFilteredAndSortedAgents());
+                    // Check if agents have changed before re-rendering
+                    const newHash = simpleHash(JSON.stringify(data.agents));
+                    if (newHash !== lastAgentsHash) {
+                        allAgents = data.agents;
+                        lastAgentsHash = newHash;
+                        renderAgents(getFilteredAndSortedAgents());
+                    }
                 } else {
                     showError('Failed to load agents');
                 }
@@ -1092,6 +1123,7 @@
         // Select an agent
         async function selectAgent(agentId) {
             currentAgentId = agentId;
+            lastMessagesHash = null; // Reset hash when switching agents
             
             // Remove new agent form if open
             const newAgentForm = document.getElementById('new-agent-form');
@@ -1109,21 +1141,29 @@
             // Update active agent in sidebar (re-render with current filter)
             renderAgents(getFilteredAndSortedAgents());
             
-            // Load messages
-            await loadMessages(agentId);
+            // Load messages (force render since we switched agents)
+            await loadMessages(agentId, true);
         }
         
         // Load messages for current agent
-        async function loadMessages(agentId) {
+        async function loadMessages(agentId, forceRender = false) {
             try {
                 const response = await fetch(`/agents/${agentId}/messages?count=20`);
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    renderMessages(data.messages);
+                    // Check if messages have changed before re-rendering
+                    const newHash = simpleHash(JSON.stringify(data.messages));
+                    if (forceRender || newHash !== lastMessagesHash) {
+                        lastMessagesHash = newHash;
+                        renderMessages(data.messages);
+                    }
                 } else if (response.status === 404) {
                     // Agent doesn't exist yet, show empty chat
-                    renderMessages([]);
+                    if (forceRender || lastMessagesHash !== 'empty') {
+                        lastMessagesHash = 'empty';
+                        renderMessages([]);
+                    }
                 } else {
                     showError('Failed to load messages');
                 }
@@ -1360,8 +1400,9 @@
                         
                         if (lastMessage.role === 'assistant' && 
                             (!lastDisplayed || !lastDisplayed.textContent.includes('ASSISTANT'))) {
-                            // Load all messages to get complete conversation
-                            loadMessages(currentAgentId);
+                            // Load all messages to get complete conversation (force render)
+                            lastMessagesHash = null; // Reset hash to force re-render
+                            loadMessages(currentAgentId, true);
                             return; // Stop polling
                         }
                     }
