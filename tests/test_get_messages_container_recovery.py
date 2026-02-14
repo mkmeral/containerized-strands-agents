@@ -58,7 +58,7 @@ class TestGetMessagesContainerStatus:
         
         # Create messages directory structure
         agent_dir = manager._get_agent_dir(agent_id)
-        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        messages_dir = agent_dir / ".agent" / "session" / "session_agent" / "agents" / "agent_default" / "messages"
         messages_dir.mkdir(parents=True, exist_ok=True)
         
         # Create some message files
@@ -326,7 +326,7 @@ class TestReadMessagesFromDisk:
         """Test that tool messages are filtered when include_tool_messages=False."""
         agent_id = "test-filter"
         agent_dir = manager._get_agent_dir(agent_id)
-        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        messages_dir = agent_dir / ".agent" / "session" / "session_agent" / "agents" / "agent_default" / "messages"
         messages_dir.mkdir(parents=True, exist_ok=True)
         
         # Create a mix of regular and tool messages
@@ -352,7 +352,7 @@ class TestReadMessagesFromDisk:
         """Test that count parameter limits results."""
         agent_id = "test-count"
         agent_dir = manager._get_agent_dir(agent_id)
-        messages_dir = agent_dir / ".agent" / "session" / "agents" / "agent_default" / "messages"
+        messages_dir = agent_dir / ".agent" / "session" / "session_agent" / "agents" / "agent_default" / "messages"
         messages_dir.mkdir(parents=True, exist_ok=True)
         
         # Create 5 messages
