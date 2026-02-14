@@ -8,6 +8,7 @@ from typing import Optional
 
 from strands import Agent
 from strands.agent.conversation_manager import SummarizingConversationManager
+from strands.models.bedrock import BedrockModel
 from strands.session.file_session_manager import FileSessionManager
 from strands_tools import (
     file_read,
@@ -367,7 +368,14 @@ def create_agent(
     # Create agent with session manager and summarizing conversation manager
     base_tools = [file_read, file_write, editor, shell, use_agent, python_repl, load_tool]
     all_tools = base_tools + GITHUB_TOOLS + mcp_tools
-    
+    bedrock_model = BedrockModel(
+        model_id="global.anthropic.claude-opus-4-6-v1",
+        additional_request_fields={
+            "thinking": {
+                "type": "adaptive"
+            }
+        }
+    )
     agent = Agent(
         system_prompt=prompt,
         tools=all_tools,
@@ -376,7 +384,7 @@ def create_agent(
             summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed
             preserve_recent_messages=10,  # Always keep 10 most recent messages
         ),
-        model="global.anthropic.claude-opus-4-5-20251101-v1:0",
+        model=bedrock_model,
     )
     logger.info(f"Agent initialized with session at {session_dir}")
     if mcp_tools:

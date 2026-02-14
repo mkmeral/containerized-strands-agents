@@ -82,41 +82,33 @@ class TestGetMessagesContainerStatus:
         mock_container.status = "running"
         mock_docker.containers.get.return_value = mock_container
         
-        # Mock the HTTP calls using patch on the module
-        with patch("containerized_strands_agents.agent_manager.httpx.AsyncClient") as mock_client_class:
-            # Create mock response for /history endpoint
-            mock_history_response = MagicMock()
-            mock_history_response.status_code = 200
-            mock_history_response.json.return_value = {"messages": [{"role": "user", "content": "test"}]}
-            mock_history_response.raise_for_status = MagicMock()
-            
-            # Create mock response for /health endpoint
-            mock_health_response = MagicMock()
-            mock_health_response.status_code = 200
-            mock_health_response.json.return_value = {"processing": False}
-            
-            # Create mock async client
-            mock_async_client = MagicMock()
-            
-            # Make get return different responses based on URL
-            async def mock_get(url, **kwargs):
-                if "health" in url:
-                    return mock_health_response
-                return mock_history_response
-            
-            mock_async_client.get = mock_get
-            
-            # Setup context manager
-            async def mock_aenter(*args):
-                return mock_async_client
-            
-            async def mock_aexit(*args):
-                return None
-            
-            mock_client_class.return_value.__aenter__ = mock_aenter
-            mock_client_class.return_value.__aexit__ = mock_aexit
-            
-            result = await manager.get_messages("test-running")
+        # Create mock response for /history endpoint
+        mock_history_response = MagicMock()
+        mock_history_response.status_code = 200
+        mock_history_response.json.return_value = {"messages": [{"role": "user", "content": "test"}]}
+        mock_history_response.raise_for_status = MagicMock()
+        
+        # Create mock response for /health endpoint
+        mock_health_response = MagicMock()
+        mock_health_response.status_code = 200
+        mock_health_response.json.return_value = {"processing": False}
+        
+        # Create mock async client
+        mock_async_client = AsyncMock()
+        
+        # Make get return different responses based on URL
+        async def mock_get(url, **kwargs):
+            if "health" in url:
+                return mock_health_response
+            return mock_history_response
+        
+        mock_async_client.get = mock_get
+        mock_async_client.is_closed = False
+        
+        # Inject the mock shared HTTP client
+        manager._http_client = mock_async_client
+        
+        result = await manager.get_messages("test-running")
         
         assert result["status"] == "success"
         assert result["container_status"] == "running"

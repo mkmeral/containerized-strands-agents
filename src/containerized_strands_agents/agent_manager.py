@@ -117,6 +117,18 @@ class AgentManager:
         self._ensure_network()
         self._ensure_image()
         self._idle_monitor_task: Optional[asyncio.Task] = None
+        self._http_client: Optional[httpx.AsyncClient] = None
+
+    async def _get_http_client(self) -> httpx.AsyncClient:
+        """Get or create a shared httpx.AsyncClient."""
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient()
+        return self._http_client
+
+    async def _is_container_running_async(self, container_id: str) -> bool:
+        """Check if container is running, non-blocking."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._is_container_running, container_id)
 
     def _ensure_network(self):
         """Ensure Docker network exists."""
@@ -732,20 +744,27 @@ class AgentManager:
             # Just log - container handles persistence, nothing for us to do
             logger.warning(f"Message dispatch to {agent_id} ended: {e}")
 
-    async def _get_agent_processing_state(self, agent: AgentInfo) -> bool:
-        """Check if agent is currently processing by querying health endpoint."""
-        if not agent.container_id or not self._is_container_running(agent.container_id):
+    async def _get_agent_processing_state(self, agent: AgentInfo, is_running: Optional[bool] = None) -> bool:
+        """Check if agent is currently processing by querying health endpoint.
+        
+        Args:
+            agent: The agent to check.
+            is_running: If already known, skip the container check.
+        """
+        if is_running is None:
+            is_running = await self._is_container_running_async(agent.container_id) if agent.container_id else False
+        if not is_running:
             return False
         
         url = f"http://localhost:{agent.port}/health"
-        async with httpx.AsyncClient() as client:
-            try:
-                resp = await client.get(url, timeout=2.0)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return data.get("processing", False)
-            except Exception:
-                pass
+        client = await self._get_http_client()
+        try:
+            resp = await client.get(url, timeout=2.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("processing", False)
+        except Exception:
+            pass
         return False
 
     def _read_messages_from_disk(self, agent_id: str, data_dir: str | None, count: int, include_tool_messages: bool) -> list[dict]:
@@ -859,8 +878,10 @@ class AgentManager:
             agent.last_read = datetime.now(timezone.utc).isoformat()
             self.tracker.update_agent(agent)
 
-        # Determine container status
-        container_running = agent.container_id and self._is_container_running(agent.container_id)
+        # Determine container status (non-blocking)
+        container_running = False
+        if agent.container_id:
+            container_running = await self._is_container_running_async(agent.container_id)
         container_status = "running" if container_running else ("stopped" if agent.container_id else "not_found")
         
         # Auto-restart if requested and container is not running
@@ -878,7 +899,7 @@ class AgentManager:
                 logger.error(f"Error auto-restarting container for agent {agent_id}: {e}")
 
         # Check processing state from container (only if running)
-        processing = await self._get_agent_processing_state(agent) if container_running else False
+        processing = await self._get_agent_processing_state(agent, is_running=container_running) if container_running else False
 
         # Base response with agent info
         base_response = {
@@ -893,19 +914,19 @@ class AgentManager:
         # If container is running, get from API
         if container_running:
             url = f"http://localhost:{agent.port}/history"
-            async with httpx.AsyncClient() as client:
-                try:
-                    resp = await client.get(url, params={"count": count, "include_tool_messages": include_tool_messages})
-                    resp.raise_for_status()
-                    data = resp.json()
-                    return {
-                        **base_response, 
-                        "messages": data.get("messages", []),
-                        "source": "container",
-                    }
-                except Exception as e:
-                    logger.error(f"Failed to get messages from agent {agent_id} container: {e}")
-                    # Fall through to disk fallback
+            client = await self._get_http_client()
+            try:
+                resp = await client.get(url, params={"count": count, "include_tool_messages": include_tool_messages})
+                resp.raise_for_status()
+                data = resp.json()
+                return {
+                    **base_response, 
+                    "messages": data.get("messages", []),
+                    "source": "container",
+                }
+            except Exception as e:
+                logger.error(f"Failed to get messages from agent {agent_id} container: {e}")
+                # Fall through to disk fallback
 
         # Fallback: read from FileSessionManager storage on disk
         messages = self._read_messages_from_disk(agent_id, agent.data_dir, count, include_tool_messages)
@@ -930,22 +951,36 @@ class AgentManager:
     async def list_agents(self) -> list[dict]:
         """List all agents with their status."""
         agents = self.tracker.load()
-        result = []
         
-        for agent in agents.values():
-            # Update status based on actual container state
+        # Batch all container status checks concurrently
+        agents_list = list(agents.values())
+        container_ids = [a.container_id for a in agents_list]
+        
+        async def _check_running(cid):
+            if not cid:
+                return False
+            return await self._is_container_running_async(cid)
+        
+        running_states = await asyncio.gather(*[
+            _check_running(cid) for cid in container_ids
+        ])
+        
+        # Update statuses and gather processing states concurrently
+        for agent, is_running in zip(agents_list, running_states):
             if agent.container_id:
-                if self._is_container_running(agent.container_id):
-                    agent.status = "running"
-                else:
-                    agent.status = "stopped"
-            
+                agent.status = "running" if is_running else "stopped"
+        
+        processing_states = await asyncio.gather(*[
+            self._get_agent_processing_state(agent, is_running=is_running)
+            for agent, is_running in zip(agents_list, running_states)
+        ])
+        
+        result = []
+        for agent, is_running, processing in zip(agents_list, running_states, processing_states):
             agent_data = agent.model_dump()
+            agent_data["processing"] = processing
             
-            # Get processing state from container health endpoint
-            agent_data["processing"] = await self._get_agent_processing_state(agent)
-            
-            # Calculate has_unread: true if last_activity > last_read (or never read)
+            # Calculate has_unread
             has_unread = False
             if agent.last_activity:
                 if not agent.last_read:
@@ -962,7 +997,127 @@ class AgentManager:
             result.append(agent_data)
         
         return result
-    
+
+    async def get_inbox(self) -> list[dict]:
+        """Get inbox data: agents with last message preview, optimized for speed.
+        
+        Unlike calling list_agents + get_messages per agent, this batches all I/O
+        concurrently and avoids redundant container checks.
+        """
+        agents = self.tracker.load()
+        agents_list = list(agents.values())
+        
+        if not agents_list:
+            return []
+        
+        # 1. Batch all container status checks concurrently
+        container_ids = [a.container_id for a in agents_list]
+        
+        async def _check_running(cid):
+            if not cid:
+                return False
+            return await self._is_container_running_async(cid)
+        
+        running_states = await asyncio.gather(*[
+            _check_running(cid) for cid in container_ids
+        ])
+        
+        # Update agent statuses
+        for agent, is_running in zip(agents_list, running_states):
+            if agent.container_id:
+                agent.status = "running" if is_running else "stopped"
+        
+        # 2. Batch processing state checks concurrently (only for running containers)
+        processing_states = await asyncio.gather(*[
+            self._get_agent_processing_state(agent, is_running=is_running)
+            for agent, is_running in zip(agents_list, running_states)
+        ])
+        
+        # 3. Batch message preview reads concurrently
+        #    Use disk reads (sync but fast) for all agents — avoids N HTTP calls
+        #    and is good enough for a preview.
+        loop = asyncio.get_event_loop()
+        message_previews = await asyncio.gather(*[
+            loop.run_in_executor(
+                None,
+                self._get_last_assistant_preview,
+                agent.agent_id,
+                agent.data_dir,
+            )
+            for agent in agents_list
+        ])
+        
+        # 4. Assemble results
+        inbox_items = []
+        for agent, is_running, processing, preview in zip(
+            agents_list, running_states, processing_states, message_previews
+        ):
+            agent_data = agent.model_dump()
+            actual_dir = self._get_agent_dir(agent.agent_id, agent.data_dir)
+            agent_data["data_dir"] = str(actual_dir)
+            agent_data["processing"] = processing
+            
+            # Calculate has_unread
+            has_unread = False
+            if agent.last_activity:
+                if not agent.last_read:
+                    has_unread = True
+                else:
+                    try:
+                        last_activity_dt = datetime.fromisoformat(agent.last_activity)
+                        last_read_dt = datetime.fromisoformat(agent.last_read)
+                        has_unread = last_activity_dt > last_read_dt
+                    except (ValueError, TypeError):
+                        has_unread = False
+            agent_data["has_unread"] = has_unread
+            agent_data["last_response_preview"] = preview
+            inbox_items.append(agent_data)
+        
+        # Sort by last_activity descending
+        inbox_items.sort(key=lambda x: x.get("last_activity") or "", reverse=True)
+        return inbox_items
+
+    def _get_last_assistant_preview(self, agent_id: str, data_dir: str | None, max_chars: int = 150) -> str | None:
+        """Read the last assistant text message from disk for preview. Sync, fast."""
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
+        messages_dir = agent_dir / ".agent" / "session" / "session_agent" / "agents" / "agent_default" / "messages"
+        
+        if not messages_dir.exists():
+            return None
+        
+        try:
+            # Read message files in reverse order to find last assistant message quickly
+            message_files = sorted(
+                messages_dir.glob("message_*.json"),
+                key=lambda f: int(f.stem.split("_")[1]),
+                reverse=True,
+            )
+            
+            for msg_file in message_files:
+                msg_data = json.loads(msg_file.read_text())
+                actual_message = msg_data.get("message", msg_data)
+                
+                if actual_message.get("role") != "assistant":
+                    continue
+                
+                content = actual_message.get("content", [])
+                text = ""
+                if isinstance(content, list):
+                    text_parts = []
+                    for c in content:
+                        if isinstance(c, dict) and "text" in c and c.get("text") and "toolUse" not in c:
+                            text_parts.append(c["text"])
+                    text = " ".join(text_parts).strip()
+                elif isinstance(content, str):
+                    text = content.strip()
+                
+                if text:
+                    return text[:max_chars - 3] + "..." if len(text) > max_chars else text
+            
+            return None
+        except Exception:
+            return None
+
     async def stop_agent(self, agent_id: str) -> bool:
         """Stop an agent's container."""
         agent = self.tracker.get_agent(agent_id)
@@ -1015,3 +1170,9 @@ class AgentManager:
         """Stop the idle monitor task."""
         if self._idle_monitor_task:
             self._idle_monitor_task.cancel()
+
+    async def close(self):
+        """Cleanup resources."""
+        self.stop_idle_monitor()
+        if self._http_client and not self._http_client.is_closed:
+            await self._http_client.aclose()

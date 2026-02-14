@@ -1304,6 +1304,11 @@
                 const response = await fetch(`/agents/${agentId}/messages?count=20`);
                 const data = await response.json();
                 
+                // Check if user switched agents while request was in flight
+                if (agentId !== currentAgentId) {
+                    return; // Discard stale response
+                }
+                
                 if (data.status === 'success') {
                     // Check if messages have changed before re-rendering
                     const newHash = simpleHash(JSON.stringify(data.messages));

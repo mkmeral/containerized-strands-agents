@@ -85,7 +85,7 @@ async def startup():
 async def shutdown():
     """Cleanup on shutdown."""
     if agent_manager:
-        agent_manager.stop_idle_monitor()
+        await agent_manager.close()
     logger.info("Web API server stopped")
 
 # API Routes
@@ -219,57 +219,7 @@ async def get_inbox():
         raise HTTPException(status_code=500, detail="Agent manager not initialized")
     
     try:
-        agents_data = await agent_manager.list_agents()
-        inbox_items = []
-        
-        for agent_data in agents_data:
-            agent_id = agent_data['agent_id']
-            custom_data_dir = agent_data.get('data_dir')
-            actual_dir = agent_manager._get_agent_dir(agent_id, custom_data_dir)
-            agent_data['data_dir'] = str(actual_dir)
-            
-            # Get last assistant message preview (don't update last_read)
-            messages_result = await agent_manager.get_messages(
-                agent_id, count=10, include_tool_messages=False, update_last_read=False
-            )
-            last_response = None
-            
-            if messages_result.get("status") == "success":
-                messages = messages_result.get("messages", [])
-                # Find last assistant message
-                for msg in reversed(messages):
-                    if msg.get("role") == "assistant":
-                        content = msg.get("content", [])
-                        if isinstance(content, list):
-                            # Handle both formats: {"type": "text", "text": "..."} and {"text": "..."}
-                            text_parts = []
-                            for c in content:
-                                if isinstance(c, dict):
-                                    # Check for text field (handles both formats)
-                                    if "text" in c and c.get("text"):
-                                        # Skip if it's a toolUse item that happens to have text
-                                        if "toolUse" not in c:
-                                            text_parts.append(c["text"])
-                            last_response = " ".join(text_parts).strip()
-                        elif isinstance(content, str):
-                            last_response = content.strip()
-                        if last_response:
-                            # Truncate to first ~150 chars for preview
-                            if len(last_response) > 150:
-                                last_response = last_response[:147] + "..."
-                            break
-            
-            inbox_items.append({
-                **agent_data,
-                "last_response_preview": last_response
-            })
-        
-        # Sort by last_activity descending (newest first)
-        inbox_items.sort(
-            key=lambda x: x.get("last_activity") or "",
-            reverse=True
-        )
-        
+        inbox_items = await agent_manager.get_inbox()
         return {
             "status": "success",
             "items": inbox_items
