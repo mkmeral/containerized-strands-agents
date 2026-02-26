@@ -288,6 +288,93 @@ async def stop_agent(agent_id: str) -> dict:
         }
 
 
+@mcp.tool
+async def import_skills(
+    agent_id: str,
+    skills_path: str | None = None,
+    skills_url: str | None = None,
+) -> dict:
+    """Import skills into an agent's container so the skills tool can discover them.
+
+    Skills follow the AgentSkills.io spec: each skill is a directory containing a
+    SKILL.md file.  Imported skills are copied into the agent's data directory
+    under ``skills/`` which is mounted at ``/data/skills/`` inside the container
+    with ``STRANDS_SKILLS_DIR`` set automatically.
+
+    At least one of ``skills_path`` or ``skills_url`` must be provided.  If both
+    are given, skills from each source are imported (path first, then URL).
+
+    After importing, restart the agent (send a new message or stop/start) so the
+    container picks up the new skills mount.
+
+    Args:
+        agent_id: The agent to import skills into.
+        skills_path: Local filesystem path to a directory containing skill folders
+                     (each with a SKILL.md per the AgentSkills.io spec).
+        skills_url: URL to a git repository or zip archive containing skill folders.
+
+    Returns:
+        dict with status and details about imported skills.
+    """
+    if not agent_manager:
+        return {"status": "error", "error": "Agent manager not initialized"}
+
+    if not skills_path and not skills_url:
+        return {
+            "status": "error",
+            "error": "At least one of skills_path or skills_url must be provided",
+        }
+
+    # Resolve effective data_dir from tracker
+    agent_info = agent_manager.tracker.get_agent(agent_id)
+    effective_data_dir = agent_info.data_dir if agent_info else None
+
+    results: list[dict] = []
+
+    if skills_path:
+        logger.info(f"Importing skills from path {skills_path} for agent {agent_id}")
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            agent_manager.import_skills_from_path,
+            agent_id,
+            skills_path,
+            effective_data_dir,
+        )
+        results.append({"source": "path", **result})
+
+    if skills_url:
+        logger.info(f"Importing skills from URL {skills_url} for agent {agent_id}")
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            agent_manager.import_skills_from_url,
+            agent_id,
+            skills_url,
+            effective_data_dir,
+        )
+        results.append({"source": "url", **result})
+
+    # Determine overall status
+    has_error = any(r.get("status") == "error" for r in results)
+    has_success = any(r.get("status") == "success" for r in results)
+
+    if has_error and not has_success:
+        overall_status = "error"
+    elif has_error and has_success:
+        overall_status = "partial"
+    else:
+        overall_status = "success"
+
+    return {
+        "status": overall_status,
+        "agent_id": agent_id,
+        "results": results,
+        "message": (
+            "Skills imported. If the agent is already running, stop and restart it "
+            "(or send a new message) so the container mounts the skills directory."
+        ),
+    }
+
+
 def main():
     """Run the MCP server."""
     import sys

@@ -5,9 +5,15 @@ import json
 import logging
 import os
 import shutil
+import subprocess
+import tempfile
+import zipfile
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
+
+import requests
 
 import docker
 import httpx
@@ -288,6 +294,101 @@ class AgentManager:
                 logger.warning(f"agent.py module not found at {agent_module}")
         except Exception as e:
             logger.error(f"Failed to copy runner files to agent {agent_id}: {e}")
+
+    def _get_skills_dir(self, agent_id: str, data_dir: str | None = None) -> Path:
+        """Get the skills directory for an agent, creating it if needed."""
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
+        skills_dir = agent_dir / "skills"
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        return skills_dir
+
+    def import_skills_from_path(self, agent_id: str, path: str, data_dir: str | None = None) -> dict:
+        """Copy skill folders from a host path into the agent's skills directory.
+
+        Each subdirectory containing a SKILL.md file is treated as a skill
+        and copied into ``{agent_dir}/skills/``.
+
+        Args:
+            agent_id: The agent identifier.
+            path: Local filesystem path to a directory containing skill folders.
+            data_dir: Optional custom data directory for the agent.
+
+        Returns:
+            dict with status and list of imported skill names.
+        """
+        source = Path(path).expanduser().resolve()
+        if not source.exists():
+            return {"status": "error", "error": f"Path not found: {path}"}
+        if not source.is_dir():
+            return {"status": "error", "error": f"Path is not a directory: {path}"}
+
+        skills_dir = self._get_skills_dir(agent_id, data_dir)
+        imported: list[str] = []
+
+        for item in source.iterdir():
+            if not item.is_dir():
+                continue
+            # Only import directories that contain a SKILL.md (AgentSkills.io spec)
+            if not (item / "SKILL.md").exists():
+                logger.debug(f"Skipping {item.name}: no SKILL.md found")
+                continue
+            dest = skills_dir / item.name
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(item, dest)
+            imported.append(item.name)
+            logger.info(f"Imported skill '{item.name}' for agent {agent_id}")
+
+        if not imported:
+            return {
+                "status": "warning",
+                "message": "No skill folders with SKILL.md found in the provided path",
+            }
+
+        return {"status": "success", "imported_skills": imported}
+
+    def import_skills_from_url(self, agent_id: str, url: str, data_dir: str | None = None) -> dict:
+        """Clone or download skills from a URL into the agent's skills directory.
+
+        Supports git repository URLs and zip archive URLs.
+
+        Args:
+            agent_id: The agent identifier.
+            url: URL to a git repo or zip archive containing skill folders.
+            data_dir: Optional custom data directory for the agent.
+
+        Returns:
+            dict with status and list of imported skill names.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+
+            if url.endswith(".zip"):
+                # Download and extract zip
+                try:
+                    resp = requests.get(url, timeout=120)
+                    resp.raise_for_status()
+                    with zipfile.ZipFile(BytesIO(resp.content)) as zf:
+                        zf.extractall(tmp_path)
+                except Exception as e:
+                    return {"status": "error", "error": f"Failed to download/extract zip: {e}"}
+            else:
+                # Treat as git repo
+                try:
+                    subprocess.run(
+                        ["git", "clone", "--depth", "1", url, str(tmp_path / "repo")],
+                        check=True,
+                        capture_output=True,
+                        timeout=120,
+                    )
+                    tmp_path = tmp_path / "repo"
+                except subprocess.CalledProcessError as e:
+                    return {"status": "error", "error": f"Git clone failed: {e.stderr.decode().strip()}"}
+                except subprocess.TimeoutExpired:
+                    return {"status": "error", "error": "Git clone timed out"}
+
+            # Now import from the downloaded/cloned directory
+            return self.import_skills_from_path(agent_id, str(tmp_path), data_dir)
 
     def _save_system_prompt(self, agent_id: str, system_prompt: str, data_dir: str | None = None):
         """Save custom system prompt for an agent."""
@@ -629,6 +730,12 @@ class AgentManager:
         agent_tools_dir = agent_dir / ".agent" / "tools"
         if agent_tools_dir.exists():
             volumes[str(agent_tools_dir.absolute())] = {"bind": "/app/tools", "mode": "ro"}
+        
+        # Mount the skills directory into /data/skills for the skills tool
+        skills_dir = agent_dir / "skills"
+        if skills_dir.exists():
+            volumes[str(skills_dir.absolute())] = {"bind": "/data/skills", "mode": "rw"}
+            env["STRANDS_SKILLS_DIR"] = "/data/skills"
         
         aws_dir = Path.home() / ".aws"
         if aws_dir.exists():

@@ -53,6 +53,13 @@ try:
 except ImportError:
     GITHUB_TOOLS = []
 
+# Skills tool (available when strands-agents-tools includes it)
+try:
+    from strands_tools import skills
+    SKILLS_TOOLS = [skills]
+except ImportError:
+    SKILLS_TOOLS = []
+
 logger = logging.getLogger(__name__)
 
 
@@ -367,7 +374,7 @@ def create_agent(
     
     # Create agent with session manager and summarizing conversation manager
     base_tools = [file_read, file_write, editor, shell, use_agent, python_repl, load_tool]
-    all_tools = base_tools + GITHUB_TOOLS + mcp_tools
+    all_tools = base_tools + GITHUB_TOOLS + SKILLS_TOOLS + mcp_tools
     bedrock_model = BedrockModel(
         model_id="global.anthropic.claude-opus-4-6-v1",
         additional_request_fields={
