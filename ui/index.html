@@ -1239,7 +1239,7 @@
                                 </div>
                                 <div class="agent-meta-row">
                                     <button class="copy-btn" onclick="copyKiroCommand(event, '${escapeHtml(dataDir)}')" title="Copy 'kiro ${escapeHtml(dataDir)}' to clipboard">
-                                        📋 Copy kiro command
+                                        📋 Copy workspace path
                                     </button>
                                 </div>
                             </div>
@@ -1787,16 +1787,14 @@
             return div.innerHTML;
         }
         
-        // Copy kiro command to clipboard
+        // Copy workspace path to clipboard
         function copyKiroCommand(event, dataDir) {
             // Prevent event bubbling to selectAgent
             event.stopPropagation();
             
-            const command = `kiro ${dataDir}`;
-            
             // Copy to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(command)
+                navigator.clipboard.writeText(dataDir)
                     .then(() => {
                         // Visual feedback
                         const btn = event.target.closest('.copy-btn');

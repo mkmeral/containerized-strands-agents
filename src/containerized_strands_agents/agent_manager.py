@@ -161,10 +161,16 @@ class AgentManager:
                 f"Please run ./scripts/build_docker.sh manually."
             )
         
+        # The Dockerfile uses paths relative to the project root (e.g. COPY docker/requirements.txt),
+        # so the build context must be the project root, not the docker/ directory itself.
+        project_root = docker_dir.parent
+        dockerfile_path = docker_dir / "Dockerfile"
+
         logger.info(f"Building Docker image from {docker_dir}...")
         try:
             image, logs = self.docker_client.images.build(
-                path=str(docker_dir),
+                path=str(project_root),
+                dockerfile=str(dockerfile_path),
                 tag=DOCKER_IMAGE_NAME,
                 rm=True,
             )

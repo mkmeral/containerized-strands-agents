@@ -29,27 +29,10 @@ try:
 except ImportError:
     MCP_AVAILABLE = False
 
-# GitHub tools are only available in Docker container
+# GitHub tool is only available in Docker container
 try:
-    from github_tools import (
-        create_issue,
-        get_issue,
-        update_issue,
-        list_issues,
-        get_issue_comments,
-        add_issue_comment,
-        create_pull_request,
-        get_pull_request,
-        update_pull_request,
-        list_pull_requests,
-        get_pr_review_and_comments,
-        reply_to_review_comment,
-    )
-    GITHUB_TOOLS = [
-        create_issue, get_issue, update_issue, list_issues, get_issue_comments, add_issue_comment,
-        create_pull_request, get_pull_request, update_pull_request, list_pull_requests,
-        get_pr_review_and_comments, reply_to_review_comment,
-    ]
+    from use_github import use_github
+    GITHUB_TOOLS = [use_github]
 except ImportError:
     GITHUB_TOOLS = []
 
@@ -380,10 +363,7 @@ def create_agent(
         system_prompt=prompt,
         tools=all_tools,
         session_manager=session_manager,
-        conversation_manager=SummarizingConversationManager(
-            summary_ratio=0.3,  # Summarize 30% of messages when context reduction needed
-            preserve_recent_messages=10,  # Always keep 10 most recent messages
-        ),
+        conversation_manager=SummarizingConversationManager(),
         model=bedrock_model,
     )
     logger.info(f"Agent initialized with session at {session_dir}")
