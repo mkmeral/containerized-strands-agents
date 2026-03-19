@@ -115,7 +115,7 @@ class AgentManager:
         self.tracker = TaskTracker()
         self._port_counter = 9000
         self._ensure_network()
-        self._ensure_image()
+        self._image_verified = False
         self._idle_monitor_task: Optional[asyncio.Task] = None
         self._http_client: Optional[httpx.AsyncClient] = None
 
@@ -578,6 +578,11 @@ class AgentManager:
         aws_region: str | None = None,
     ) -> AgentInfo:
         """Start or restart a container for an agent."""
+        # Lazy image build - only on first container creation, not on server startup
+        if not self._image_verified:
+            self._ensure_image()
+            self._image_verified = True
+
         agent_dir = self._get_agent_dir(agent.agent_id, agent.data_dir)
         
         # Remove existing container if any

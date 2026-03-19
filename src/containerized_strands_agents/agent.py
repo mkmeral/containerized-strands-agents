@@ -8,6 +8,7 @@ from typing import Optional
 
 from strands import Agent
 from strands.agent.conversation_manager import SummarizingConversationManager
+from botocore.config import Config as BotocoreConfig
 from strands.models.bedrock import BedrockModel
 from strands.session.file_session_manager import FileSessionManager
 from strands_tools import (
@@ -353,10 +354,15 @@ def create_agent(
     all_tools = base_tools + GITHUB_TOOLS + mcp_tools
     bedrock_model = BedrockModel(
         model_id="global.anthropic.claude-opus-4-6-v1",
+        max_tokens=128_000,
+        boto_client_config=BotocoreConfig(
+            read_timeout=300,
+        ),
         additional_request_fields={
             "thinking": {
                 "type": "adaptive"
-            }
+            },
+            "anthropic_beta": ["context-1m-2025-08-07"],
         }
     )
     agent = Agent(
