@@ -45,6 +45,10 @@ ENV_CAPABILITIES = [
         "env_var": "AWS_BEARER_TOKEN_BEDROCK",
         "capability": "AWS Bedrock bearer token is available",
     },
+    {
+        "env_var": "PERPLEXITY_API_KEY",
+        "capability": "Perplexity API key is available for web search",
+    },
 ]
 
 # Extract just the env var names for passthrough
@@ -214,6 +218,7 @@ class AgentManager:
         (agent_dir / ".agent" / "tools").mkdir(exist_ok=True)
         (agent_dir / ".agent" / "session").mkdir(exist_ok=True)
         (agent_dir / ".agent" / "runner").mkdir(exist_ok=True)
+        (agent_dir / ".agent" / "skills").mkdir(exist_ok=True)
         return agent_dir
 
     def _copy_global_tools(self, agent_id: str, data_dir: str | None = None):
@@ -294,6 +299,77 @@ class AgentManager:
                 logger.warning(f"agent.py module not found at {agent_module}")
         except Exception as e:
             logger.error(f"Failed to copy runner files to agent {agent_id}: {e}")
+
+    def _copy_skills(self, agent_id: str, data_dir: str | None = None):
+        """Copy default skills to agent's .agent/skills/ directory.
+        
+        Copies bundled skills from the package's skills/ directory to the agent's
+        data directory, enabling the AgentSkills plugin to discover them.
+        """
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
+        skills_dest = agent_dir / ".agent" / "skills"
+        
+        # Find the skills directory - check installed package location first, then dev location
+        skills_src = Path(__file__).parent / "skills"
+        if not skills_src.exists():
+            # Fallback to development layout
+            skills_src = Path(__file__).parent.parent.parent / "skills"
+        
+        if not skills_src.exists():
+            logger.info("No default skills directory found to copy")
+            return
+        
+        try:
+            # Copy each skill directory
+            for skill_dir in skills_src.iterdir():
+                if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                    dest_skill_dir = skills_dest / skill_dir.name
+                    dest_skill_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copy all files in the skill directory
+                    for skill_file in skill_dir.iterdir():
+                        if skill_file.is_file():
+                            dest_file = dest_skill_dir / skill_file.name
+                            shutil.copy2(skill_file, dest_file)
+                    
+                    logger.info(f"Copied skill {skill_dir.name} to agent {agent_id}")
+        except Exception as e:
+            logger.error(f"Failed to copy skills to agent {agent_id}: {e}")
+
+    def _copy_global_skills(self, agent_id: str, data_dir: str | None = None):
+        """Copy global skills from CONTAINERIZED_AGENTS_SKILLS env var.
+        
+        Similar to _copy_global_tools but for skills directories.
+        Skills from this directory are merged with (and override) default skills.
+        """
+        global_skills_dir = os.environ.get("CONTAINERIZED_AGENTS_SKILLS")
+        if not global_skills_dir:
+            return
+        
+        global_skills_path = Path(global_skills_dir).expanduser().resolve()
+        if not global_skills_path.exists() or not global_skills_path.is_dir():
+            logger.warning(f"Global skills directory not found or not a directory: {global_skills_dir}")
+            return
+        
+        agent_dir = self._get_agent_dir(agent_id, data_dir)
+        skills_dest = agent_dir / ".agent" / "skills"
+        
+        try:
+            # Copy each skill directory from the global skills path
+            for skill_dir in global_skills_path.iterdir():
+                if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                    dest_skill_dir = skills_dest / skill_dir.name
+                    dest_skill_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copy all files in the skill directory
+                    for skill_file in skill_dir.iterdir():
+                        if skill_file.is_file():
+                            dest_file = dest_skill_dir / skill_file.name
+                            shutil.copy2(skill_file, dest_file)
+                    
+                    logger.info(f"Copied global skill {skill_dir.name} to agent {agent_id}")
+        except Exception as e:
+            logger.error(f"Failed to copy global skills to agent {agent_id}: {e}")
 
     def _save_system_prompt(self, agent_id: str, system_prompt: str, data_dir: str | None = None):
         """Save custom system prompt for an agent."""
@@ -521,9 +597,11 @@ class AgentManager:
             # Copy per-agent tools (these can override global tools with same names)
             self._copy_per_agent_tools(agent_id, tools, effective_data_dir)
         
-        # Always copy runner files for new agents or when restarting
+        # Always copy runner files and default skills for new agents or when restarting
         if not agent:
             self._copy_runner_files(agent_id, effective_data_dir)
+            self._copy_skills(agent_id, effective_data_dir)
+            self._copy_global_skills(agent_id, effective_data_dir)
         
         if agent and agent.container_id:
             # Check if container is still running
@@ -614,6 +692,11 @@ class AgentManager:
         custom_system_prompt = self._load_system_prompt(agent.agent_id, agent.data_dir)
         if custom_system_prompt:
             env["CUSTOM_SYSTEM_PROMPT"] = "true"
+        
+        # Pass through CONTAINERIZED_AGENTS_SKILLS if set (for global skills)
+        global_skills = os.environ.get("CONTAINERIZED_AGENTS_SKILLS")
+        if global_skills:
+            env["CONTAINERIZED_AGENTS_SKILLS"] = "/app/skills"
 
         # Pass through configured environment variables
         for var_name in PASSTHROUGH_ENV_VARS:
@@ -640,6 +723,11 @@ class AgentManager:
         agent_tools_dir = agent_dir / ".agent" / "tools"
         if agent_tools_dir.exists():
             volumes[str(agent_tools_dir.absolute())] = {"bind": "/app/tools", "mode": "ro"}
+        
+        # Mount the skills directory into /app/skills for the agent to discover
+        agent_skills_dir = agent_dir / ".agent" / "skills"
+        if agent_skills_dir.exists():
+            volumes[str(agent_skills_dir.absolute())] = {"bind": "/app/skills", "mode": "ro"}
         
         aws_dir = Path.home() / ".aws"
         if aws_dir.exists():

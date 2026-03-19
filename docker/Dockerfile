@@ -28,6 +28,12 @@ COPY src/containerized_strands_agents /app/containerized_strands_agents
 # Copy agent code
 COPY docker/*.py /app/
 
+# Copy default skills
+COPY skills/ /app/skills/
+
+# Copy SYSTEM_PROMPT.md for default system prompt
+COPY SYSTEM_PROMPT.md /app/SYSTEM_PROMPT.md
+
 # Create tools directory for dynamic tool loading
 RUN mkdir -p /app/tools
 
