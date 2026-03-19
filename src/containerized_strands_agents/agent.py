@@ -30,6 +30,13 @@ try:
 except ImportError:
     MCP_AVAILABLE = False
 
+# Perplexity search tool (optional)
+try:
+    from strands_perplexity import perplexity_search
+    PERPLEXITY_TOOLS = [perplexity_search]
+except ImportError:
+    PERPLEXITY_TOOLS = []
+
 # GitHub tool is only available in Docker container
 try:
     from use_github import use_github
@@ -51,8 +58,46 @@ def get_env_capabilities() -> str:
         return ""
 
 
+def load_system_prompt_md(data_dir: Path) -> Optional[str]:
+    """Load system prompt from SYSTEM_PROMPT.md file.
+    
+    Resolution order:
+    1. Agent-specific: data_dir/.agent/SYSTEM_PROMPT.md
+    2. Docker bundled: /app/SYSTEM_PROMPT.md
+    3. Package relative: ../../../SYSTEM_PROMPT.md (development)
+    4. Current directory: ./SYSTEM_PROMPT.md
+    
+    Returns:
+        Content of the SYSTEM_PROMPT.md file, or None if not found.
+    """
+    possible_paths = [
+        data_dir / ".agent" / "SYSTEM_PROMPT.md",  # Agent-specific
+        Path("/app/SYSTEM_PROMPT.md"),               # Docker container
+        Path(__file__).parent.parent.parent / "SYSTEM_PROMPT.md",  # Dev layout
+        Path("SYSTEM_PROMPT.md"),                    # Current directory
+    ]
+    
+    for path in possible_paths:
+        try:
+            if path.exists() and path.is_file():
+                content = path.read_text(encoding="utf-8").strip()
+                if content:
+                    logger.info(f"Loaded system prompt from {path}")
+                    return content
+        except Exception as e:
+            logger.warning(f"Failed to read {path}: {e}")
+    
+    return None
+
+
 def load_system_prompt(data_dir: Path, custom_system_prompt: Optional[str] = None) -> str:
     """Load system prompt, preferring custom if available.
+    
+    Resolution order (highest to lowest priority):
+    1. custom_system_prompt parameter (passed directly)
+    2. Agent's persisted system_prompt.txt (from data_dir/.agent/)
+    3. SYSTEM_PROMPT.md file (agent-specific > Docker > dev > cwd)
+    4. Default inline prompt (fallback)
     
     Args:
         data_dir: Path to the agent data directory
@@ -65,7 +110,7 @@ def load_system_prompt(data_dir: Path, custom_system_prompt: Optional[str] = Non
     if custom_system_prompt:
         base_prompt = custom_system_prompt
     else:
-        # Try to load from file if enabled
+        # Try to load from persisted file if enabled
         custom_prompt_file = data_dir / ".agent" / "system_prompt.txt"
         if os.getenv("CUSTOM_SYSTEM_PROMPT") == "true" and custom_prompt_file.exists():
             try:
@@ -73,17 +118,22 @@ def load_system_prompt(data_dir: Path, custom_system_prompt: Optional[str] = Non
                 logger.info("Using custom system prompt from file")
             except Exception as e:
                 logger.error(f"Failed to load custom system prompt: {e}")
-                logger.info("Falling back to default system prompt")
+                logger.info("Falling back to SYSTEM_PROMPT.md or default")
                 base_prompt = None
         else:
             base_prompt = None
     
         if not base_prompt:
-            # Detect if running in Docker (data_dir starts with /data)
-            is_docker = str(data_dir).startswith("/data")
-            workspace_path = str(data_dir / "workspace") if is_docker else str(data_dir / "workspace")
-            
-            base_prompt = f"""You are a helpful AI assistant{"" if not is_docker else " running in an isolated Docker container"}.
+            # Try SYSTEM_PROMPT.md
+            md_prompt = load_system_prompt_md(data_dir)
+            if md_prompt:
+                base_prompt = md_prompt
+            else:
+                # Detect if running in Docker (data_dir starts with /data)
+                is_docker = str(data_dir).startswith("/data")
+                workspace_path = str(data_dir / "workspace")
+                
+                base_prompt = f"""You are a helpful AI assistant{"" if not is_docker else " running in an isolated Docker container"}.
 
 IMPORTANT: Your persistent workspace is {workspace_path}. ALWAYS work in this directory.
 - Clone repos here: cd {workspace_path} && git clone ...
@@ -107,7 +157,7 @@ When given a task:
     
     # Always append workspace info for custom prompts (they need to know where to work)
     is_docker = str(data_dir).startswith("/data")
-    workspace_path = str(data_dir / "workspace") if is_docker else str(data_dir / "workspace")
+    workspace_path = str(data_dir / "workspace")
     
     # Only add workspace info if it's a custom prompt (default already has it)
     if custom_system_prompt or (os.getenv("CUSTOM_SYSTEM_PROMPT") == "true"):
@@ -309,6 +359,80 @@ def create_mcp_clients(mcp_config: dict) -> list:
 _active_mcp_clients = []
 
 
+def load_skills_plugin(data_dir: Path):
+    """Load the AgentSkills plugin if skills directory exists.
+    
+    Resolution order for skills directories:
+    1. Agent-specific: data_dir/.agent/skills/
+    2. Global from env var: CONTAINERIZED_AGENTS_SKILLS
+    3. Docker bundled: /app/skills/
+    4. Package relative: ../../../skills/ (development)
+    
+    Args:
+        data_dir: Path to the agent data directory
+        
+    Returns:
+        AgentSkills plugin instance, or None if no skills found
+    """
+    try:
+        from strands.vended_plugins.skills import AgentSkills
+    except ImportError:
+        logger.info("AgentSkills plugin not available (strands-agents too old?)")
+        return None
+    
+    # Collect all skills directories (agent-specific takes precedence)
+    possible_paths = [
+        data_dir / ".agent" / "skills",                          # Agent-specific
+    ]
+    
+    # Global skills directory from env var
+    global_skills_dir = os.environ.get("CONTAINERIZED_AGENTS_SKILLS")
+    if global_skills_dir:
+        possible_paths.append(Path(global_skills_dir).expanduser().resolve())
+    
+    possible_paths.extend([
+        Path("/app/skills"),                                      # Docker container
+        Path(__file__).parent.parent.parent / "skills",           # Dev layout
+        Path("skills"),                                           # Current directory
+    ])
+    
+    skills_dir = None
+    for path in possible_paths:
+        try:
+            if path.exists() and path.is_dir():
+                # Check it actually has skill subdirectories
+                has_skills = any(
+                    (child / "SKILL.md").exists()
+                    for child in path.iterdir()
+                    if child.is_dir()
+                )
+                if has_skills:
+                    skills_dir = path
+                    break
+        except Exception as e:
+            logger.warning(f"Error checking skills path {path}: {e}")
+    
+    if skills_dir is None:
+        logger.info("No skills directory found")
+        return None
+    
+    try:
+        plugin = AgentSkills(skills=str(skills_dir))
+        skills = plugin.get_available_skills()
+        
+        if skills:
+            logger.info(f"AgentSkills plugin: {len(skills)} skills loaded from {skills_dir}")
+            for skill in skills:
+                logger.info(f"  - {skill.name}: {skill.description[:60]}...")
+            return plugin
+        else:
+            logger.info(f"AgentSkills plugin: no skills found in {skills_dir}")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to load skills plugin: {e}")
+        return None
+
+
 def create_agent(
     data_dir: Path,
     system_prompt: Optional[str] = None,
@@ -349,9 +473,15 @@ def create_agent(
     mcp_config = load_mcp_config(data_dir)
     mcp_tools = create_mcp_clients(mcp_config)
     
+    # Load plugins (skills)
+    plugins = []
+    skills_plugin = load_skills_plugin(data_dir)
+    if skills_plugin:
+        plugins.append(skills_plugin)
+    
     # Create agent with session manager and summarizing conversation manager
     base_tools = [file_read, file_write, editor, shell, use_agent, python_repl, load_tool]
-    all_tools = base_tools + GITHUB_TOOLS + mcp_tools
+    all_tools = base_tools + GITHUB_TOOLS + PERPLEXITY_TOOLS + mcp_tools
     bedrock_model = BedrockModel(
         model_id="global.anthropic.claude-opus-4-6-v1",
         max_tokens=128_000,
@@ -368,6 +498,7 @@ def create_agent(
     agent = Agent(
         system_prompt=prompt,
         tools=all_tools,
+        plugins=plugins if plugins else None,
         session_manager=session_manager,
         conversation_manager=SummarizingConversationManager(),
         model=bedrock_model,
@@ -375,6 +506,10 @@ def create_agent(
     logger.info(f"Agent initialized with session at {session_dir}")
     if mcp_tools:
         logger.info(f"Agent initialized with {len(mcp_tools)} MCP tools")
+    if PERPLEXITY_TOOLS:
+        logger.info("Perplexity search tool loaded")
+    if plugins:
+        logger.info(f"Agent initialized with {len(plugins)} plugins")
     
     # Load dynamic tools if tools directory is provided
     load_dynamic_tools(agent, tools_dir)
