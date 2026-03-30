@@ -1,4 +1,4 @@
-"""FastMCP Server for Agent Host."""
+"""FastMCP Server for Agent Host with MCP Tasks support."""
 
 import asyncio
 import logging
@@ -7,14 +7,26 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastmcp import FastMCP
+from mcp.types import (
+    ServerTasksCapability,
+    TasksListCapability,
+    TasksCancelCapability,
+    TASK_STATUS_COMPLETED,
+    TASK_STATUS_FAILED,
+    TaskStatusNotification,
+    TaskStatusNotificationParams,
+)
 
 from containerized_strands_agents.agent_manager import AgentManager
+from containerized_strands_agents.task_store import TaskStore
+from containerized_strands_agents.task_handlers import register_task_handlers
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global agent manager instance
+# Global instances
 agent_manager: AgentManager | None = None
+task_store: TaskStore | None = None
 
 
 def _parse_system_prompts_env() -> list[dict[str, str]]:
@@ -67,10 +79,17 @@ def _parse_system_prompts_env() -> list[dict[str, str]]:
 
 def _build_send_message_docstring() -> str:
     """Build the docstring for send_message with dynamic system prompt list."""
-    base_docstring = """Send a message to an agent (fire-and-forget). Creates the agent if it doesn't exist.
+    base_docstring = """Send a message to an agent and get a task for tracking.
 
-    This returns immediately after dispatching the message. The agent processes
-    the message in the background. Use get_messages to check for the response.
+    Creates the agent if it doesn't exist. Returns an MCP Task object that 
+    clients can use to track progress via the tasks protocol:
+    - tasks/get: Check task status
+    - tasks/list: List all tasks
+    - tasks/cancel: Cancel a running task
+    - tasks/result: Get task output
+
+    The agent processes the message in the background. Task status automatically
+    transitions from 'working' → 'completed' or 'failed'.
 
     Args:
         agent_id: Unique identifier for the agent. Use descriptive names like 
@@ -112,21 +131,10 @@ def _build_send_message_docstring() -> str:
     base_docstring += """
 
     Returns:
-        dict with status ("dispatched", "queued", or "error") and agent_id."""
+        dict with task info including taskId for tracking, status, and agent_id.
+        Use the taskId with tasks/get, tasks/result, or tasks/cancel."""
 
     return base_docstring
-
-
-@asynccontextmanager
-async def lifespan(app):
-    """Manage agent manager lifecycle."""
-    global agent_manager
-    agent_manager = AgentManager()
-    await agent_manager.start_idle_monitor()
-    logger.info("Agent Host MCP Server started")
-    yield
-    agent_manager.stop_idle_monitor()
-    logger.info("Agent Host MCP Server stopped")
 
 
 mcp = FastMCP(
@@ -134,18 +142,25 @@ mcp = FastMCP(
     instructions="""This MCP server spawns background worker agents in Docker containers.
 
 IMPORTANT: These are autonomous background workers, NOT interactive assistants.
-- send_message dispatches work to an agent and returns immediately
-- Agents work independently in the background (can take minutes to hours)
-- Do NOT invoke get_messages multiple times waiting for results. Give time to agents for them to work and complete their task.
-- Use get_messages only when a human explicitly asks to check on an agent's progress
+
+How it works:
+1. send_message dispatches work to an agent and returns a Task immediately
+2. Each Task has a taskId that you can use to track progress
+3. Use tasks/get with the taskId to check if the agent is done
+4. Use tasks/result with the taskId to get the agent's output
+5. Use tasks/cancel with the taskId to stop a running task
+6. Use tasks/list to see all tasks and their statuses
+
+Task lifecycle: working → completed (success) or failed (error) or cancelled (stopped)
 
 Typical workflow:
-1. Use send_message to assign a task to an agent
-2. Move on to other work - the agent runs autonomously  
-3. Check results later via get_messages only if explicitly asked by the user
+1. send_message("researcher", "Find all open issues") → returns Task with taskId
+2. Move on to other work — the agent runs autonomously
+3. Check status: tasks/get(taskId) → see if still 'working' or 'completed'
+4. Get results: tasks/result(taskId) → see what the agent produced
 
-Use list_agents to see all agents and their status.
-Use stop_agent to terminate an agent's container.
+Use list_agents to see all agents and their container status.
+Use get_messages to read raw conversation history from an agent.
 """,
 )
 
@@ -163,28 +178,170 @@ async def _send_message(
     mcp_config_file: str | None = None,
     description: str | None = None,
 ) -> dict:
-    if not agent_manager:
-        return {"status": "error", "error": "Agent manager not initialized"}
+    if not agent_manager or not task_store:
+        return {"status": "error", "error": "Server not initialized"}
     
     logger.info(f"Sending message to agent {agent_id}")
-    result = await agent_manager.send_message(
-        agent_id, 
-        message,
-        aws_profile=aws_profile,
-        aws_region=aws_region,
-        system_prompt=system_prompt,
-        system_prompt_file=system_prompt_file,
-        tools=tools,
-        data_dir=data_dir,
-        mcp_config=mcp_config,
-        mcp_config_file=mcp_config_file,
-        description=description,
+    
+    # Create an MCP Task to track this dispatch
+    task = await task_store.create_task(agent_id, message)
+    
+    # Get or create the agent container
+    try:
+        agent = await agent_manager.get_or_create_agent(
+            agent_id,
+            aws_profile=aws_profile,
+            aws_region=aws_region,
+            system_prompt=system_prompt,
+            system_prompt_file=system_prompt_file,
+            tools=tools,
+            data_dir=data_dir,
+            mcp_config=mcp_config,
+            mcp_config_file=mcp_config_file,
+            description=description,
+        )
+    except Exception as e:
+        # Mark task as failed
+        await task_store.update_status(
+            task.taskId,
+            status=TASK_STATUS_FAILED,
+            status_message=f"Failed to initialize agent: {e}",
+            error=str(e),
+        )
+        return {
+            "status": "error",
+            "error": f"Failed to initialize agent: {e}",
+            "taskId": task.taskId,
+        }
+    
+    if agent.status != "running":
+        await task_store.update_status(
+            task.taskId,
+            status=TASK_STATUS_FAILED,
+            status_message=f"Agent not running: {agent.status}",
+            error=f"Agent not running: {agent.status}",
+        )
+        return {
+            "status": "error", 
+            "error": f"Agent not running: {agent.status}",
+            "taskId": task.taskId,
+        }
+
+    # Update agent's last activity
+    from datetime import datetime, timezone
+    agent.last_activity = datetime.now(timezone.utc).isoformat()
+    agent_manager.tracker.update_agent(agent)
+    
+    # Fire and forget — dispatch message and track completion via task
+    asyncio.create_task(
+        _dispatch_and_track(agent_id, agent.port, agent.data_dir, message, task.taskId)
     )
-    return result
+    
+    return {
+        "status": "dispatched",
+        "agent_id": agent_id,
+        "taskId": task.taskId,
+        "taskStatus": task.status,
+        "message": (
+            f"Task {task.taskId} created. Agent '{agent_id}' is processing. "
+            f"Use tasks/get or tasks/result with taskId to check progress."
+        ),
+    }
 
 # Dynamically set the docstring and register the tool with explicit name
 _send_message.__doc__ = _build_send_message_docstring()
 send_message = mcp.tool(name="send_message")(_send_message)
+
+
+async def _dispatch_and_track(
+    agent_id: str,
+    port: int,
+    data_dir: str | None,
+    message: str,
+    task_id: str,
+):
+    """Dispatch message to agent container and update task on completion.
+    
+    This is the bridge between the fire-and-forget dispatch and the MCP Tasks
+    protocol. When the agent finishes (or fails), the task is updated.
+    """
+    import httpx
+    
+    url = f"http://localhost:{port}/chat"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(3600.0, connect=30.0)) as client:
+            resp = await client.post(url, json={"message": message})
+            
+            if resp.status_code == 200:
+                # Agent finished successfully — get the latest messages for the task payload
+                output_messages = []
+                if agent_manager:
+                    try:
+                        result = await agent_manager.get_messages(
+                            agent_id, count=1, include_tool_messages=False, update_last_read=False
+                        )
+                        output_messages = result.get("messages", [])
+                    except Exception as e:
+                        logger.warning(f"Failed to get messages for task {task_id}: {e}")
+                
+                if task_store:
+                    await task_store.update_status(
+                        task_id,
+                        status=TASK_STATUS_COMPLETED,
+                        status_message=f"Agent '{agent_id}' completed successfully",
+                        output_messages=output_messages,
+                    )
+            else:
+                if task_store:
+                    await task_store.update_status(
+                        task_id,
+                        status=TASK_STATUS_FAILED,
+                        status_message=f"Agent '{agent_id}' returned HTTP {resp.status_code}",
+                        error=f"HTTP {resp.status_code}: {resp.text[:500]}",
+                    )
+                    
+    except httpx.TimeoutException:
+        if task_store:
+            await task_store.update_status(
+                task_id,
+                status=TASK_STATUS_FAILED,
+                status_message=f"Agent '{agent_id}' timed out",
+                error="Request timed out after 3600 seconds",
+            )
+    except Exception as e:
+        logger.warning(f"Message dispatch to {agent_id} ended: {e}")
+        if task_store:
+            # Check if agent is still processing — connection drops don't mean failure
+            try:
+                agent = agent_manager.tracker.get_agent(agent_id)
+                if agent and agent.container_id:
+                    is_running = agent_manager._is_container_running(agent.container_id)
+                    if is_running:
+                        # Agent is still running, check if processing
+                        processing = await agent_manager._get_agent_processing_state(agent)
+                        if not processing:
+                            # Agent finished but we lost the connection — get results
+                            result = await agent_manager.get_messages(
+                                agent_id, count=1, include_tool_messages=False, update_last_read=False
+                            )
+                            await task_store.update_status(
+                                task_id,
+                                status=TASK_STATUS_COMPLETED,
+                                status_message=f"Agent '{agent_id}' completed (connection dropped but agent finished)",
+                                output_messages=result.get("messages", []),
+                            )
+                            return
+                        # else: still processing, leave task as working
+                        return
+            except Exception:
+                pass
+            
+            await task_store.update_status(
+                task_id,
+                status=TASK_STATUS_FAILED,
+                status_message=f"Agent '{agent_id}' dispatch failed: {e}",
+                error=str(e),
+            )
 
 
 @mcp.tool
@@ -196,19 +353,9 @@ async def get_messages(
 ) -> dict:
     """Get the latest messages from an agent's conversation history.
 
-    CRITICAL - CONTEXT BLOAT WARNING:
-    Each call returns large message payloads that consume your context window.
-    Repeated calls will quickly exhaust context and degrade your performance.
-    
-    RULES:
-    1. NEVER call immediately after send_message - agents need minutes to hours
-    2. NEVER call multiple times in a row to check completion status
-    3. NEVER poll in a loop waiting for processing=False
-    4. Call ONCE only when user explicitly asks to check on an agent
-    5. If processing=True, tell user "agent is still working" and STOP
-    
-    BAD: send_message() -> get_messages() -> get_messages() -> get_messages()
-    GOOD: send_message() -> [other work] -> user asks -> get_messages() once
+    NOTE: For task-based tracking, prefer using tasks/get and tasks/result
+    with the taskId returned by send_message. This tool provides direct 
+    access to the full conversation history.
 
     Args:
         agent_id: The agent to get messages from.
@@ -217,20 +364,9 @@ async def get_messages(
                               Defaults to False to keep responses smaller.
         auto_restart: If True and the agent's container is stopped, automatically
                      restart it before fetching messages. Defaults to False.
-                     Use this when you need to ensure you're getting the latest
-                     state from a running container.
 
     Returns:
-        dict with:
-        - status: "success" or "error"
-        - agent_id: The agent identifier
-        - container_id: Docker container ID (if exists)
-        - container_status: "running", "stopped", or "not_found"
-        - data_dir: Agent's data directory path
-        - processing: Whether the agent is currently processing a request
-        - source: "container" or "disk" - indicates where messages were read from
-        - messages: List of conversation messages
-        - restart_hint: (only when stopped) Instructions for restarting the container
+        dict with messages, container status, and processing state.
     """
     if not agent_manager:
         return {"status": "error", "error": "Agent manager not initialized"}
@@ -247,12 +383,27 @@ async def list_agents(unread_only: bool = False) -> dict:
                     Useful for checking which agents have new responses.
     
     Returns:
-        dict with list of agents including id, status, data_dir, has_unread, and last activity.
+        dict with list of agents including id, status, data_dir, has_unread, 
+        and active task info.
     """
-    if not agent_manager:
-        return {"status": "error", "error": "Agent manager not initialized"}
+    if not agent_manager or not task_store:
+        return {"status": "error", "error": "Server not initialized"}
     
     agents = await agent_manager.list_agents()
+    
+    # Enrich with active task info
+    for agent_data in agents:
+        agent_id = agent_data.get("agent_id")
+        active_task = await task_store.get_active_task_for_agent(agent_id)
+        if active_task:
+            agent_data["active_task"] = {
+                "taskId": active_task.taskId,
+                "status": active_task.status,
+                "statusMessage": active_task.statusMessage,
+                "createdAt": active_task.createdAt.isoformat(),
+            }
+        else:
+            agent_data["active_task"] = None
     
     if unread_only:
         agents = [a for a in agents if a.get("has_unread", False)]
@@ -264,22 +415,32 @@ async def list_agents(unread_only: bool = False) -> dict:
 async def stop_agent(agent_id: str) -> dict:
     """Stop an agent's Docker container immediately.
     
+    This also cancels any active tasks for the agent.
+    
     Args:
         agent_id: The ID of the agent to stop.
     
     Returns:
-        dict with status ("success" or "error") and details about the operation.
+        dict with status and details about the operation.
     """
-    if not agent_manager:
-        return {"status": "error", "error": "Agent manager not initialized"}
+    if not agent_manager or not task_store:
+        return {"status": "error", "error": "Server not initialized"}
     
     logger.info(f"Stopping agent {agent_id}")
+    
+    # Cancel any active tasks for this agent
+    active_task = await task_store.get_active_task_for_agent(agent_id)
+    if active_task:
+        await task_store.cancel_task(active_task.taskId)
+        logger.info(f"Cancelled active task {active_task.taskId} for agent {agent_id}")
+    
     success = await agent_manager.stop_agent(agent_id)
     
     if success:
         return {
             "status": "success", 
-            "message": f"Agent {agent_id} has been stopped successfully"
+            "message": f"Agent {agent_id} has been stopped successfully",
+            "cancelled_task": active_task.taskId if active_task else None,
         }
     else:
         return {
@@ -293,9 +454,47 @@ def main():
     import sys
     
     async def run():
-        global agent_manager
+        global agent_manager, task_store
+        
         agent_manager = AgentManager()
+        task_store = TaskStore()
+        
         await agent_manager.start_idle_monitor()
+        
+        # Register MCP task protocol handlers
+        register_task_handlers(mcp, task_store, agent_manager)
+        
+        # Set up task notification callback
+        async def send_task_notification(task_id: str, task):
+            """Send task status notification to connected clients."""
+            try:
+                notification = TaskStatusNotification(
+                    method="notifications/tasks/status",
+                    params=TaskStatusNotificationParams(
+                        taskId=task.taskId,
+                        status=task.status,
+                        statusMessage=task.statusMessage,
+                        createdAt=task.createdAt,
+                        lastUpdatedAt=task.lastUpdatedAt,
+                        ttl=task.ttl,
+                        pollInterval=task.pollInterval,
+                    ),
+                )
+                # Send via the underlying MCP server session if available
+                if hasattr(mcp, '_mcp_server') and mcp._mcp_server:
+                    server = mcp._mcp_server
+                    if hasattr(server, 'request_context') and server.request_context:
+                        session = server.request_context.session
+                        if session:
+                            await session.send_notification(notification)
+                            logger.debug(f"Sent task status notification for {task_id}")
+            except Exception as e:
+                logger.debug(f"Could not send task notification for {task_id}: {e}")
+        
+        task_store.set_notification_callback(send_task_notification)
+        
+        logger.info("Agent Host MCP Server started with Tasks support")
+        
         try:
             await mcp.run_async()
         finally:
