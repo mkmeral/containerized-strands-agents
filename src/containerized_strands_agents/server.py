@@ -461,6 +461,9 @@ def main():
         
         await agent_manager.start_idle_monitor()
         
+        # Reconcile tasks with actual container states after restart
+        await task_store.reconcile_with_agents(agent_manager)
+        
         # Register MCP task protocol handlers
         register_task_handlers(mcp, task_store, agent_manager)
         
@@ -493,7 +496,7 @@ def main():
         
         task_store.set_notification_callback(send_task_notification)
         
-        logger.info("Agent Host MCP Server started with Tasks support")
+        logger.info("Agent Host MCP Server started with Tasks support (file-backed persistence)")
         
         try:
             await mcp.run_async()

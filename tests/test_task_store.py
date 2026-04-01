@@ -1,8 +1,10 @@
-"""Tests for the TaskStore."""
+"""Tests for the TaskStore (file-backed persistence)."""
 
 import asyncio
+import json
 import pytest
 from datetime import datetime, timezone
+from pathlib import Path
 
 from containerized_strands_agents.task_store import TaskStore, TaskPayload
 from mcp.types import (
@@ -14,9 +16,15 @@ from mcp.types import (
 
 
 @pytest.fixture
-def task_store():
-    """Create a fresh TaskStore for each test."""
-    return TaskStore(ttl_ms=3600000, poll_interval_ms=5000)
+def tmp_tasks_file(tmp_path):
+    """Create a temporary tasks file path for each test."""
+    return tmp_path / "mcp_tasks.json"
+
+
+@pytest.fixture
+def task_store(tmp_tasks_file):
+    """Create a fresh TaskStore backed by a temp file for each test."""
+    return TaskStore(tasks_file=tmp_tasks_file, ttl_ms=3600000, poll_interval_ms=5000)
 
 
 @pytest.mark.asyncio
@@ -32,6 +40,57 @@ async def test_create_task(task_store):
     assert task.createdAt is not None
     assert task.lastUpdatedAt is not None
     assert task_store.task_count == 1
+
+
+@pytest.mark.asyncio
+async def test_create_task_persists_to_disk(task_store, tmp_tasks_file):
+    """Test that creating a task writes to disk."""
+    task = await task_store.create_task("test-agent", "Hello world")
+    
+    # Verify file exists and contains the task
+    assert tmp_tasks_file.exists()
+    data = json.loads(tmp_tasks_file.read_text())
+    assert task.taskId in data
+    assert data[task.taskId]["payload"]["agent_id"] == "test-agent"
+    assert data[task.taskId]["payload"]["input_message"] == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_load_tasks_from_disk(tmp_tasks_file):
+    """Test that tasks are loaded from disk on init."""
+    # Create a store and add a task
+    store1 = TaskStore(tasks_file=tmp_tasks_file, ttl_ms=3600000, poll_interval_ms=5000)
+    task = await store1.create_task("test-agent", "Hello world")
+    await store1.update_status(task.taskId, status=TASK_STATUS_COMPLETED, status_message="Done")
+    
+    # Create a new store from the same file — should load the task
+    store2 = TaskStore(tasks_file=tmp_tasks_file, ttl_ms=3600000, poll_interval_ms=5000)
+    assert store2.task_count == 1
+    
+    loaded_task = await store2.get_task(task.taskId)
+    assert loaded_task is not None
+    assert loaded_task.status == TASK_STATUS_COMPLETED
+    assert loaded_task.statusMessage == "Done"
+    
+    loaded_payload = await store2.get_payload(task.taskId)
+    assert loaded_payload is not None
+    assert loaded_payload.agent_id == "test-agent"
+    assert loaded_payload.input_message == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_load_from_nonexistent_file(tmp_path):
+    """Test loading from a file that doesn't exist yet."""
+    store = TaskStore(tasks_file=tmp_path / "nonexistent.json")
+    assert store.task_count == 0
+
+
+@pytest.mark.asyncio
+async def test_load_from_corrupted_file(tmp_tasks_file):
+    """Test loading from a corrupted JSON file."""
+    tmp_tasks_file.write_text("not valid json {{{")
+    store = TaskStore(tasks_file=tmp_tasks_file)
+    assert store.task_count == 0
 
 
 @pytest.mark.asyncio
@@ -98,6 +157,22 @@ async def test_update_status_to_completed(task_store):
     # Verify payload was updated
     payload = await task_store.get_payload(task.taskId)
     assert payload.output_messages == output
+
+
+@pytest.mark.asyncio
+async def test_update_status_persists_to_disk(task_store, tmp_tasks_file):
+    """Test that status updates are persisted to disk."""
+    task = await task_store.create_task("test-agent", "Hello")
+    
+    await task_store.update_status(
+        task.taskId,
+        status=TASK_STATUS_COMPLETED,
+        status_message="Done",
+    )
+    
+    # Verify on disk
+    data = json.loads(tmp_tasks_file.read_text())
+    assert data[task.taskId]["task"]["status"] == TASK_STATUS_COMPLETED
 
 
 @pytest.mark.asyncio
@@ -225,10 +300,11 @@ async def test_get_active_task_for_agent_none(task_store):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_expired(task_store):
+async def test_cleanup_expired(tmp_path):
     """Test expired task cleanup."""
     # Create a task store with very short TTL
-    short_ttl_store = TaskStore(ttl_ms=1, poll_interval_ms=100)
+    tasks_file = tmp_path / "mcp_tasks.json"
+    short_ttl_store = TaskStore(tasks_file=tasks_file, ttl_ms=1, poll_interval_ms=100)
     
     await short_ttl_store.create_task("test-agent", "Hello")
     assert short_ttl_store.task_count == 1
@@ -238,6 +314,10 @@ async def test_cleanup_expired(task_store):
     
     await short_ttl_store.cleanup_expired()
     assert short_ttl_store.task_count == 0
+    
+    # Verify cleanup persisted to disk
+    data = json.loads(tasks_file.read_text())
+    assert len(data) == 0
 
 
 @pytest.mark.asyncio
@@ -273,3 +353,46 @@ async def test_notification_callback_error_handled(task_store):
     # Should not raise, even though callback fails
     updated = await task_store.update_status(task.taskId, status=TASK_STATUS_COMPLETED)
     assert updated.status == TASK_STATUS_COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_persistence_survives_restart(tmp_tasks_file):
+    """Test full restart scenario: create tasks, 'crash', reload."""
+    # Phase 1: Create tasks
+    store1 = TaskStore(tasks_file=tmp_tasks_file, ttl_ms=3600000, poll_interval_ms=5000)
+    task_a = await store1.create_task("agent-a", "Task A message")
+    task_b = await store1.create_task("agent-b", "Task B message")
+    
+    # Complete task A with output
+    output = [{"role": "assistant", "content": [{"type": "text", "text": "Result A"}]}]
+    await store1.update_status(task_a.taskId, status=TASK_STATUS_COMPLETED, output_messages=output)
+    
+    # Task B is still working when "crash" happens
+    del store1  # Simulate crash
+    
+    # Phase 2: Restart — load from disk
+    store2 = TaskStore(tasks_file=tmp_tasks_file, ttl_ms=3600000, poll_interval_ms=5000)
+    assert store2.task_count == 2
+    
+    # Task A should be completed with output
+    loaded_a = await store2.get_task(task_a.taskId)
+    assert loaded_a.status == TASK_STATUS_COMPLETED
+    payload_a = await store2.get_payload(task_a.taskId)
+    assert payload_a.output_messages == output
+    
+    # Task B should still be working (reconciliation handles this separately)
+    loaded_b = await store2.get_task(task_b.taskId)
+    assert loaded_b.status == TASK_STATUS_WORKING
+    payload_b = await store2.get_payload(task_b.taskId)
+    assert payload_b.agent_id == "agent-b"
+
+
+@pytest.mark.asyncio
+async def test_cancel_persists_to_disk(task_store, tmp_tasks_file):
+    """Test that task cancellation persists to disk."""
+    task = await task_store.create_task("test-agent", "Hello")
+    await task_store.cancel_task(task.taskId)
+    
+    # Verify on disk
+    data = json.loads(tmp_tasks_file.read_text())
+    assert data[task.taskId]["task"]["status"] == TASK_STATUS_CANCELLED
