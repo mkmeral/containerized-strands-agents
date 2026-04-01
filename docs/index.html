@@ -63,7 +63,6 @@
             padding: 60px 80px;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.5s ease, transform 0.5s ease;
             transform: translateX(40px);
         }
 
@@ -71,11 +70,6 @@
             opacity: 1;
             pointer-events: auto;
             transform: translateX(0);
-        }
-
-        .slide.exit-left {
-            opacity: 0;
-            transform: translateX(-40px);
         }
 
         /* ═══════════════════════════════════════════════════════════════
@@ -134,6 +128,8 @@
             background: var(--border);
             cursor: pointer;
             transition: all 0.3s ease;
+            border: none;
+            padding: 0;
         }
 
         .nav-dots .dot.active {
@@ -142,6 +138,30 @@
         }
 
         .nav-dots .dot:hover { background: var(--accent-glow); }
+
+        .nav-btn {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            padding: 4px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: var(--font-sans);
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--text);
+            border-color: var(--accent);
+        }
+
+        .nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
 
         /* ═══════════════════════════════════════════════════════════════
            TYPOGRAPHY
@@ -238,17 +258,17 @@
         .code-block .code-dots .dot-yellow { background: #eab308; }
         .code-block .code-dots .dot-green { background: #22c55e; }
 
-        /* Syntax highlighting (manual) */
-        .kw  { color: var(--purple); }       /* keyword   */
-        .fn  { color: var(--sky); }          /* function  */
-        .str { color: var(--green); }        /* string    */
-        .cm  { color: #6b7280; font-style: italic; } /* comment */
-        .num { color: var(--orange); }       /* number    */
-        .op  { color: var(--text-dim); }     /* operator  */
-        .cls { color: var(--teal); }         /* class     */
-        .dec { color: var(--amber); }        /* decorator */
-        .var { color: var(--text); }         /* variable  */
-        .imp { color: var(--rose); }         /* import    */
+        /* Syntax highlighting */
+        .kw  { color: var(--purple); }
+        .fn  { color: var(--sky); }
+        .str { color: var(--green); }
+        .cm  { color: #6b7280; font-style: italic; }
+        .num { color: var(--orange); }
+        .op  { color: var(--text-dim); }
+        .cls { color: var(--teal); }
+        .dec { color: var(--amber); }
+        .var { color: var(--text); }
+        .imp { color: var(--rose); }
 
         /* ═══════════════════════════════════════════════════════════════
            CARDS & GRID
@@ -529,6 +549,45 @@
         }
 
         /* ═══════════════════════════════════════════════════════════════
+           STRANDS INTRO SLIDE SPECIFIC
+           ═══════════════════════════════════════════════════════════════ */
+        .strands-features {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        .strands-feature {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px 24px;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .strands-feature .sf-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .strands-feature .sf-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .strands-feature .sf-desc {
+            font-size: 13px;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
            RESPONSIVE
            ═══════════════════════════════════════════════════════════════ */
         @media (max-width: 900px) {
@@ -538,6 +597,7 @@
             .flow-steps { flex-direction: column; }
             .flow-arrow { transform: rotate(90deg); align-self: center; }
             .takeaway-grid { grid-template-columns: 1fr; }
+            .strands-features { grid-template-columns: 1fr; }
         }
 
         /* Inline code */
@@ -604,9 +664,78 @@
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 1: THE PROBLEM
+         SLIDE 1: STRANDS BACKGROUND (NEW)
          ═══════════════════════════════════════════════════════════════ -->
     <section class="slide" data-slide="1">
+        <div class="section-label fade-in">Background</div>
+        <h2 class="fade-in delay-1"><span class="gradient">Strands Agents</span> — A Quick Intro</h2>
+        <p class="slide-subtitle fade-in delay-2" style="margin-bottom: 28px;">
+            An open-source SDK for building AI agents. Model-agnostic, tool-use native, production-ready.
+        </p>
+
+        <div class="two-col fade-in delay-3" style="max-width: 1100px;">
+            <div class="col">
+                <div class="code-block" style="margin-bottom: 20px;">
+                    <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
+                    <span class="code-label">Python</span>
+<span class="kw">from</span> <span class="imp">strands</span> <span class="kw">import</span> <span class="cls">Agent</span>
+<span class="kw">from</span> <span class="imp">strands.tools.mcp</span> <span class="kw">import</span> <span class="cls">MCPClient</span>
+
+<span class="cm"># Create an agent with MCP tools</span>
+agent = <span class="cls">Agent</span>(
+    tools=[<span class="cls">MCPClient</span>(my_transport)],
+)
+
+<span class="cm"># That's it. Tools auto-discovered.</span>
+agent(<span class="str">"Analyze the latest PRs"</span>)
+                </div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <span class="badge badge-accent">pip install strands-agents</span>
+                    <span class="badge badge-green">Apache 2.0</span>
+                    <span class="badge badge-teal">AWS Open Source</span>
+                </div>
+            </div>
+
+            <div class="col">
+                <div class="strands-features" style="grid-template-columns: 1fr;">
+                    <div class="strands-feature">
+                        <div class="sf-icon">🔌</div>
+                        <div>
+                            <div class="sf-title">Native MCP Support</div>
+                            <div class="sf-desc">First-class <code>MCPClient</code> integration. Point at any MCP server, tools are auto-discovered and callable.</div>
+                        </div>
+                    </div>
+                    <div class="strands-feature">
+                        <div class="sf-icon">🤖</div>
+                        <div>
+                            <div class="sf-title">Model Agnostic</div>
+                            <div class="sf-desc">Works with Bedrock, Anthropic API, OpenAI, Ollama, LiteLLM — swap models without changing agent code.</div>
+                        </div>
+                    </div>
+                    <div class="strands-feature">
+                        <div class="sf-icon">🧩</div>
+                        <div>
+                            <div class="sf-title">Multi-Agent Patterns</div>
+                            <div class="sf-desc">Built-in Swarm orchestration, Graph pipelines, Agent-as-Tool composition, and A2A protocol support.</div>
+                        </div>
+                    </div>
+                    <div class="strands-feature">
+                        <div class="sf-icon">🔄</div>
+                        <div>
+                            <div class="sf-title">Session &amp; State Management</div>
+                            <div class="sf-desc">File, S3, and DynamoDB session managers. Agents can persist conversations and resume across runtimes.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         SLIDE 2: THE PROBLEM
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="slide" data-slide="2">
         <div class="section-label fade-in">The Problem</div>
         <h2 class="fade-in delay-1">Single-Agent Architectures<br>Hit a Wall</h2>
         <p class="slide-subtitle fade-in delay-2" style="margin-bottom:32px;">
@@ -625,7 +754,7 @@
                 <div class="card-desc">Sequential tool calls block. A research task and a coding task can't run simultaneously.</div>
             </div>
             <div class="card">
-                <div class="card-icon">🔒</div>
+                <div class="card-icon">🔓</div>
                 <div class="card-title">No Isolation</div>
                 <div class="card-desc">All tools share one environment. A rogue shell command can destroy the workspace.</div>
             </div>
@@ -638,9 +767,9 @@
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 2: MCP AS COMPOSABILITY LAYER
+         SLIDE 3: MCP AS COMPOSABILITY LAYER
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="2">
+    <section class="slide" data-slide="3">
         <div class="section-label fade-in">The Solution</div>
         <h2 class="fade-in delay-1">MCP: The <span class="gradient">Composability</span> Layer</h2>
         <p class="slide-subtitle fade-in delay-2">
@@ -682,9 +811,9 @@
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 3: MCP TASKS DEEP DIVE
+         SLIDE 4: MCP TASKS DEEP DIVE
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="3">
+    <section class="slide" data-slide="4">
         <div class="section-label fade-in">Deep Dive</div>
         <h2 class="fade-in delay-1">MCP Tasks: Async Agents,<br><span class="gradient">Protocol-Native</span></h2>
 
@@ -719,7 +848,7 @@ result = <span class="fn">send_message</span>(<span class="str">"researcher"</sp
                 <div class="code-block" style="margin-bottom: 20px;">
                     <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
                     <span class="code-label">Python</span>
-<span class="cm"># Dispatch — returns Task object</span>
+<span class="cm"># Dispatch → returns Task object</span>
 result = <span class="fn">send_message</span>(<span class="str">"researcher"</span>, <span class="str">"find issues"</span>)
 <span class="cm"># → {taskId: "task-abc", status: "working"}</span>
 
@@ -741,9 +870,9 @@ tasks/<span class="fn">list</span>()         <span class="cm"># → all active t
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 4: ARCHITECTURE DIAGRAM
+         SLIDE 5: ARCHITECTURE DIAGRAM
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="4">
+    <section class="slide" data-slide="5">
         <div class="section-label fade-in">Architecture</div>
         <h2 class="fade-in delay-1">Containerized Strands Agents</h2>
         <p class="slide-subtitle fade-in delay-2" style="margin-bottom: 24px;">
@@ -752,11 +881,16 @@ tasks/<span class="fn">list</span>()         <span class="cm"># → all active t
 
         <div class="diagram-container fade-in delay-3">
             <svg viewBox="0 0 1060 440" xmlns="http://www.w3.org/2000/svg" fill="none">
-                <!-- Background grid dots -->
                 <defs>
                     <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
                         <circle cx="1" cy="1" r="0.5" fill="#1e293b" opacity="0.5"/>
                     </pattern>
+                    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                        <polygon points="0 0, 8 3, 0 6" fill="#6366f1"/>
+                    </marker>
+                    <marker id="arrowhead-teal" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                        <polygon points="0 0, 8 3, 0 6" fill="#2dd4bf"/>
+                    </marker>
                 </defs>
                 <rect width="1060" height="440" fill="url(#grid)"/>
 
@@ -769,22 +903,13 @@ tasks/<span class="fn">list</span>()         <span class="cm"># → all active t
 
                 <!-- Arrow Client → Server -->
                 <line x1="200" y1="220" x2="280" y2="220" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowhead)"/>
-                <defs>
-                    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-                        <polygon points="0 0, 8 3, 0 6" fill="#6366f1"/>
-                    </marker>
-                    <marker id="arrowhead-teal" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-                        <polygon points="0 0, 8 3, 0 6" fill="#2dd4bf"/>
-                    </marker>
-                </defs>
 
                 <!-- MCP Server Box -->
                 <rect x="280" y="30" width="220" height="380" rx="14" fill="#111827" stroke="#818cf8" stroke-width="2" stroke-dasharray="6,3"/>
                 <text x="390" y="58" text-anchor="middle" fill="#818cf8" font-family="Inter,sans-serif" font-size="13" font-weight="700">FastMCP Server</text>
 
-                <!-- Tools inside server -->
                 <rect x="300" y="76" width="180" height="32" rx="6" fill="rgba(99,102,241,0.1)" stroke="#6366f1" stroke-width="1"/>
-                <text x="390" y="96" text-anchor="middle" fill="#a78bfa" font-family="JetBrains Mono,monospace" font-size="11">send_message  →  Task</text>
+                <text x="390" y="96" text-anchor="middle" fill="#a78bfa" font-family="JetBrains Mono,monospace" font-size="11">send_message → Task</text>
 
                 <rect x="300" y="116" width="180" height="32" rx="6" fill="rgba(99,102,241,0.1)" stroke="#6366f1" stroke-width="1"/>
                 <text x="390" y="136" text-anchor="middle" fill="#a78bfa" font-family="JetBrains Mono,monospace" font-size="11">tasks/get · tasks/list</text>
@@ -792,21 +917,17 @@ tasks/<span class="fn">list</span>()         <span class="cm"># → all active t
                 <rect x="300" y="156" width="180" height="32" rx="6" fill="rgba(99,102,241,0.1)" stroke="#6366f1" stroke-width="1"/>
                 <text x="390" y="176" text-anchor="middle" fill="#a78bfa" font-family="JetBrains Mono,monospace" font-size="11">tasks/cancel · result</text>
 
-                <!-- Task Store -->
                 <rect x="300" y="202" width="180" height="40" rx="6" fill="rgba(45,212,191,0.08)" stroke="#2dd4bf" stroke-width="1"/>
                 <text x="390" y="218" text-anchor="middle" fill="#2dd4bf" font-family="JetBrains Mono,monospace" font-size="10">TaskStore</text>
                 <text x="390" y="234" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="9">mcp_tasks.json (file-backed)</text>
 
-                <!-- Agent Manager -->
                 <rect x="300" y="254" width="180" height="40" rx="6" fill="rgba(251,191,36,0.08)" stroke="#fbbf24" stroke-width="1"/>
                 <text x="390" y="270" text-anchor="middle" fill="#fbbf24" font-family="JetBrains Mono,monospace" font-size="10">AgentManager</text>
                 <text x="390" y="286" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="9">Docker lifecycle + tracking</text>
 
-                <!-- Notifications -->
                 <rect x="300" y="306" width="180" height="32" rx="6" fill="rgba(251,113,133,0.08)" stroke="#fb7185" stroke-width="1"/>
                 <text x="390" y="326" text-anchor="middle" fill="#fb7185" font-family="JetBrains Mono,monospace" font-size="10">🔔 notifications/tasks/status</text>
 
-                <!-- Persistence -->
                 <rect x="300" y="350" width="180" height="44" rx="6" fill="rgba(74,222,128,0.08)" stroke="#4ade80" stroke-width="1"/>
                 <text x="390" y="368" text-anchor="middle" fill="#4ade80" font-family="JetBrains Mono,monospace" font-size="10">💾 File Persistence</text>
                 <text x="390" y="384" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="9">Survives restart · Snapshottable</text>
@@ -854,16 +975,15 @@ tasks/<span class="fn">list</span>()         <span class="cm"># → all active t
                 <text x="940" y="208" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="10">Server IS an MCP server</text>
                 <text x="940" y="224" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="10">Agents USE MCP servers</text>
 
-                <!-- Arrow from containers to callout -->
                 <line x1="800" y1="200" x2="838" y2="200" stroke="#6366f1" stroke-width="1" stroke-dasharray="3,2"/>
             </svg>
         </div>
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 5: THE CODE — AGENT CREATION
+         SLIDE 6: THE CODE
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="5">
+    <section class="slide" data-slide="6">
         <div class="section-label fade-in">The Code</div>
         <h2 class="fade-in delay-1">Minimal Code, Maximum Power</h2>
 
@@ -882,7 +1002,7 @@ tasks/<span class="fn">list</span>()         <span class="cm"># → all active t
     mcp_tools = <span class="fn">load_mcp_from_config</span>(
         data_dir / <span class="str">".agent/mcp.json"</span>
     )
-    
+
     <span class="kw">return</span> <span class="cls">Agent</span>(
         system_prompt=<span class="fn">load_prompt</span>(data_dir),
         tools=[shell, editor, *mcp_tools],
@@ -924,15 +1044,19 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 6: TASK LIFECYCLE
+         SLIDE 7: TASK LIFECYCLE
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="6">
+    <section class="slide" data-slide="7">
         <div class="section-label fade-in">Lifecycle</div>
         <h2 class="fade-in delay-1">Task Lifecycle — From Dispatch to Result</h2>
 
         <div class="diagram-container fade-in delay-2" style="max-width: 950px; margin-bottom: 24px;">
             <svg viewBox="0 0 920 200" xmlns="http://www.w3.org/2000/svg" fill="none">
-                <!-- Step 1: send_message -->
+                <defs>
+                    <marker id="arrowhead2" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                        <polygon points="0 0, 8 3, 0 6" fill="#6366f1"/>
+                    </marker>
+                </defs>
                 <rect x="0" y="40" width="160" height="120" rx="12" fill="#111827" stroke="#6366f1" stroke-width="2"/>
                 <text x="80" y="72" text-anchor="middle" fill="#6366f1" font-family="JetBrains Mono,monospace" font-size="11" font-weight="600">send_message()</text>
                 <text x="80" y="96" text-anchor="middle" fill="#e2e8f0" font-family="Inter,sans-serif" font-size="12" font-weight="600">Dispatch</text>
@@ -940,10 +1064,8 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
                 <text x="80" y="132" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="10">Spawns container</text>
                 <text x="80" y="148" text-anchor="middle" fill="#fbbf24" font-family="JetBrains Mono,monospace" font-size="10">→ taskId</text>
 
-                <!-- Arrow -->
-                <line x1="160" y1="100" x2="195" y2="100" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowhead)"/>
+                <line x1="160" y1="100" x2="195" y2="100" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowhead2)"/>
 
-                <!-- Step 2: Working -->
                 <rect x="195" y="40" width="160" height="120" rx="12" fill="#111827" stroke="#fbbf24" stroke-width="2"/>
                 <text x="275" y="72" text-anchor="middle" fill="#fbbf24" font-family="JetBrains Mono,monospace" font-size="11" font-weight="600">working</text>
                 <text x="275" y="96" text-anchor="middle" fill="#e2e8f0" font-family="Inter,sans-serif" font-size="12" font-weight="600">Processing</text>
@@ -951,10 +1073,8 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
                 <text x="275" y="132" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="10">Uses its MCP tools</text>
                 <text x="275" y="148" text-anchor="middle" fill="#fb7185" font-family="JetBrains Mono,monospace" font-size="10">🔔 status notifications</text>
 
-                <!-- Arrow -->
-                <line x1="355" y1="100" x2="390" y2="100" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowhead)"/>
+                <line x1="355" y1="100" x2="390" y2="100" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowhead2)"/>
 
-                <!-- Step 3: tasks/get -->
                 <rect x="390" y="40" width="160" height="120" rx="12" fill="#111827" stroke="#38bdf8" stroke-width="2"/>
                 <text x="470" y="72" text-anchor="middle" fill="#38bdf8" font-family="JetBrains Mono,monospace" font-size="11" font-weight="600">tasks/get</text>
                 <text x="470" y="96" text-anchor="middle" fill="#e2e8f0" font-family="Inter,sans-serif" font-size="12" font-weight="600">Check Status</text>
@@ -962,10 +1082,8 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
                 <text x="470" y="132" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="10">Or await notification</text>
                 <text x="470" y="148" text-anchor="middle" fill="#2dd4bf" font-family="JetBrains Mono,monospace" font-size="10">pollInterval: 5000ms</text>
 
-                <!-- Arrow -->
-                <line x1="550" y1="100" x2="585" y2="100" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowhead)"/>
+                <line x1="550" y1="100" x2="585" y2="100" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowhead2)"/>
 
-                <!-- Step 4: completed -->
                 <rect x="585" y="40" width="160" height="120" rx="12" fill="#111827" stroke="#4ade80" stroke-width="2"/>
                 <text x="665" y="72" text-anchor="middle" fill="#4ade80" font-family="JetBrains Mono,monospace" font-size="11" font-weight="600">completed</text>
                 <text x="665" y="96" text-anchor="middle" fill="#e2e8f0" font-family="Inter,sans-serif" font-size="12" font-weight="600">Done</text>
@@ -973,17 +1091,14 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
                 <text x="665" y="132" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="10">Result available</text>
                 <text x="665" y="148" text-anchor="middle" fill="#4ade80" font-family="JetBrains Mono,monospace" font-size="10">TTL: 24 hours</text>
 
-                <!-- Arrow -->
-                <line x1="745" y1="100" x2="780" y2="100" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowhead)"/>
+                <line x1="745" y1="100" x2="780" y2="100" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowhead2)"/>
 
-                <!-- Step 5: tasks/result -->
                 <rect x="780" y="40" width="130" height="120" rx="12" fill="#111827" stroke="#a78bfa" stroke-width="2"/>
                 <text x="845" y="72" text-anchor="middle" fill="#a78bfa" font-family="JetBrains Mono,monospace" font-size="11" font-weight="600">tasks/result</text>
                 <text x="845" y="96" text-anchor="middle" fill="#e2e8f0" font-family="Inter,sans-serif" font-size="12" font-weight="600">Get Output</text>
                 <text x="845" y="120" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="10">Full agent response</text>
                 <text x="845" y="140" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="10">Text content</text>
 
-                <!-- Cancel branch -->
                 <line x1="275" y1="160" x2="275" y2="185" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,2"/>
                 <rect x="205" y="175" width="140" height="24" rx="6" fill="rgba(251,113,133,0.1)" stroke="#fb7185" stroke-width="1"/>
                 <text x="275" y="192" text-anchor="middle" fill="#fb7185" font-family="JetBrains Mono,monospace" font-size="10">tasks/cancel → stopped</text>
@@ -1008,9 +1123,9 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 7: PORTABLE AGENT STATE
+         SLIDE 8: PORTABLE AGENT STATE
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="7">
+    <section class="slide" data-slide="8">
         <div class="section-label fade-in">Portability</div>
         <h2 class="fade-in delay-1">Same Agent, <span class="gradient">Any Runtime</span></h2>
         <p class="slide-subtitle fade-in delay-2" style="margin-bottom: 28px;">
@@ -1019,7 +1134,11 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
 
         <div class="diagram-container fade-in delay-3" style="max-width: 950px; margin-bottom: 24px;">
             <svg viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg" fill="none">
-                <!-- Central: Snapshot ZIP -->
+                <defs>
+                    <marker id="arr-bi" markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto"><polygon points="0 0, 6 2.5, 0 5" fill="#fbbf24"/></marker>
+                    <marker id="arr-bi-r" markerWidth="6" markerHeight="5" refX="1" refY="2.5" orient="auto"><polygon points="6 0, 0 2.5, 6 5" fill="#fbbf24"/></marker>
+                </defs>
+
                 <rect x="340" y="90" width="220" height="100" rx="14" fill="#111827" stroke="#fbbf24" stroke-width="2"/>
                 <text x="450" y="120" text-anchor="middle" fill="#fbbf24" font-family="Inter,sans-serif" font-size="15" font-weight="700">📦 Agent Snapshot</text>
                 <text x="450" y="142" text-anchor="middle" fill="#94a3b8" font-family="JetBrains Mono,monospace" font-size="10">.agent/session/  →  conversation</text>
@@ -1027,35 +1146,25 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
                 <text x="450" y="170" text-anchor="middle" fill="#94a3b8" font-family="JetBrains Mono,monospace" font-size="10">workspace/       →  files + code</text>
                 <text x="450" y="184" text-anchor="middle" fill="#94a3b8" font-family="JetBrains Mono,monospace" font-size="10">mcp_tasks.json   →  task history</text>
 
-                <!-- Docker (left) -->
                 <rect x="30" y="20" width="200" height="90" rx="12" fill="#0d1117" stroke="#2dd4bf" stroke-width="2"/>
                 <text x="130" y="48" text-anchor="middle" fill="#2dd4bf" font-family="Inter,sans-serif" font-size="14" font-weight="700">🐳 Local Docker</text>
                 <text x="130" y="70" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="11">Development · Demos</text>
                 <text x="130" y="90" text-anchor="middle" fill="#e2e8f0" font-family="JetBrains Mono,monospace" font-size="10">containerized-strands run</text>
 
-                <!-- GHA (left-bottom) -->
                 <rect x="30" y="170" width="200" height="90" rx="12" fill="#0d1117" stroke="#6366f1" stroke-width="2"/>
                 <text x="130" y="198" text-anchor="middle" fill="#6366f1" font-family="Inter,sans-serif" font-size="14" font-weight="700">⚡ GitHub Actions</text>
                 <text x="130" y="218" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="11">CI/CD · Automation</text>
                 <text x="130" y="238" text-anchor="middle" fill="#e2e8f0" font-family="JetBrains Mono,monospace" font-size="10">workflow_dispatch</text>
 
-                <!-- AgentCore (right) -->
                 <rect x="670" y="20" width="200" height="90" rx="12" fill="#0d1117" stroke="#fb923c" stroke-width="2"/>
                 <text x="770" y="48" text-anchor="middle" fill="#fb923c" font-family="Inter,sans-serif" font-size="14" font-weight="700">☁️ AgentCore</text>
                 <text x="770" y="70" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="11">Production · Scale</text>
                 <text x="770" y="90" text-anchor="middle" fill="#e2e8f0" font-family="JetBrains Mono,monospace" font-size="10">InvokeAgentRuntime</text>
 
-                <!-- Any MCP Client (right-bottom) -->
                 <rect x="670" y="170" width="200" height="90" rx="12" fill="#0d1117" stroke="#a78bfa" stroke-width="2"/>
                 <text x="770" y="198" text-anchor="middle" fill="#a78bfa" font-family="Inter,sans-serif" font-size="14" font-weight="700">🔌 Any MCP Client</text>
                 <text x="770" y="218" text-anchor="middle" fill="#94a3b8" font-family="Inter,sans-serif" font-size="11">Kiro · Claude Desktop</text>
                 <text x="770" y="238" text-anchor="middle" fill="#e2e8f0" font-family="JetBrains Mono,monospace" font-size="10">stdio / streamable-http</text>
-
-                <!-- Arrows: bidirectional -->
-                <defs>
-                    <marker id="arr-bi" markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto"><polygon points="0 0, 6 2.5, 0 5" fill="#fbbf24"/></marker>
-                    <marker id="arr-bi-r" markerWidth="6" markerHeight="5" refX="1" refY="2.5" orient="auto"><polygon points="6 0, 0 2.5, 6 5" fill="#fbbf24"/></marker>
-                </defs>
 
                 <line x1="230" y1="65" x2="340" y2="115" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arr-bi)" marker-start="url(#arr-bi-r)"/>
                 <line x1="230" y1="215" x2="340" y2="165" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arr-bi)" marker-start="url(#arr-bi-r)"/>
@@ -1079,9 +1188,9 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 8: LIVE DEMO FLOW
+         SLIDE 9: LIVE DEMO FLOW
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="8">
+    <section class="slide" data-slide="9">
         <div class="section-label fade-in">Live Demo</div>
         <h2 class="fade-in delay-1">Multi-Agent Collaboration</h2>
         <p class="slide-subtitle fade-in delay-2">
@@ -1133,9 +1242,9 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 9: MCP FEATURES USED
+         SLIDE 10: MCP FEATURES USED
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="9">
+    <section class="slide" data-slide="10">
         <div class="section-label fade-in">MCP Coverage</div>
         <h2 class="fade-in delay-1">Five MCP Capabilities,<br>One System</h2>
 
@@ -1185,9 +1294,9 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 10: KEY TAKEAWAYS
+         SLIDE 11: KEY TAKEAWAYS
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="10">
+    <section class="slide" data-slide="11">
         <div class="section-label fade-in">Takeaways</div>
         <h2 class="fade-in delay-1">What to Remember</h2>
 
@@ -1233,9 +1342,9 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         SLIDE 11: LINKS / CTA
+         SLIDE 12: LINKS / CTA
          ═══════════════════════════════════════════════════════════════ -->
-    <section class="slide" data-slide="11">
+    <section class="slide" data-slide="12">
         <div class="hero-bg">
             <div class="orb orb-1"></div>
             <div class="orb orb-2"></div>
@@ -1281,7 +1390,7 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
                 MCP Dev Summit North America 2026
             </p>
             <p style="font-size: 14px; color: var(--accent-glow);">
-                ← → arrow keys to navigate &nbsp;·&nbsp; Built with Strands 🧬
+                ← → arrow keys to navigate · Built with Strands 🧬
             </p>
         </div>
     </section>
@@ -1299,21 +1408,26 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
             <path d="M2 17l10 5 10-5" stroke="#2dd4bf"/>
             <path d="M2 12l10 5 10-5" stroke="#818cf8"/>
         </svg>
-        <span>Strands Agents &times; MCP</span>
+        <span>Strands Agents × MCP</span>
     </div>
 
-    <div class="nav-dots" id="nav-dots"></div>
+    <div class="nav-controls">
+        <button class="nav-btn" id="btn-prev" onclick="goTo(current - 1)">← Prev</button>
+        <div class="nav-dots" id="nav-dots"></div>
+        <button class="nav-btn" id="btn-next" onclick="goTo(current + 1)">Next →</button>
+    </div>
 
     <div class="counter" id="counter"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════
-     SLIDE ENGINE
+     SLIDE ENGINE (FIXED — proper bidirectional navigation)
      ═══════════════════════════════════════════════════════════════ -->
 <script>
     const slides = document.querySelectorAll('.slide');
     const total = slides.length;
     let current = 0;
+    let animating = false;
 
     const progress = document.getElementById('progress');
     const counter = document.getElementById('counter');
@@ -1323,25 +1437,49 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
     for (let i = 0; i < total; i++) {
         const dot = document.createElement('div');
         dot.className = 'dot' + (i === 0 ? ' active' : '');
-        dot.addEventListener('click', () => goTo(i));
+        dot.addEventListener('click', function(e) {
+            e.stopPropagation();
+            goTo(i);
+        });
         navDots.appendChild(dot);
     }
 
     function goTo(n) {
-        if (n < 0 || n >= total || n === current) return;
+        if (n < 0 || n >= total || n === current || animating) return;
+        animating = true;
 
         const prev = slides[current];
         const next = slides[n];
-
-        // Direction
         const dir = n > current ? 1 : -1;
 
+        // 1. Remove active from current slide (starts its fade-out via CSS defaults)
         prev.classList.remove('active');
-        prev.classList.add(dir > 0 ? 'exit-left' : '');
-        setTimeout(() => { prev.classList.remove('exit-left'); }, 500);
 
+        // 2. Position incoming slide at its starting point (no transition)
+        next.style.transition = 'none';
+        next.style.opacity = '0';
         next.style.transform = dir > 0 ? 'translateX(40px)' : 'translateX(-40px)';
+        next.style.pointerEvents = 'auto';
+
+        // 3. Force reflow — browser commits the starting position
+        void next.offsetWidth;
+
+        // 4. Re-enable transition and animate to final position
+        next.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+        next.style.opacity = '1';
+        next.style.transform = 'translateX(0)';
         next.classList.add('active');
+
+        // 5. Clean up inline styles after transition completes
+        setTimeout(function() {
+            next.style.transition = '';
+            next.style.transform = '';
+            next.style.opacity = '';
+            next.style.pointerEvents = '';
+            prev.style.transform = '';
+            prev.style.opacity = '';
+            animating = false;
+        }, 550);
 
         // Update dots
         navDots.children[current].classList.remove('active');
@@ -1351,11 +1489,11 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
 
         // Progress bar
         progress.style.width = ((current / (total - 1)) * 100) + '%';
-        counter.textContent = `${current + 1} / ${total}`;
+        counter.textContent = (current + 1) + ' / ' + total;
     }
 
-    // Keyboard
-    document.addEventListener('keydown', (e) => {
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
         if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
             e.preventDefault();
             goTo(current + 1);
@@ -1373,24 +1511,25 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
 
     // Touch support (swipe)
     let touchStartX = 0;
-    document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
-    document.addEventListener('touchend', (e) => {
+    document.addEventListener('touchstart', function(e) { touchStartX = e.touches[0].clientX; });
+    document.addEventListener('touchend', function(e) {
         const diff = touchStartX - e.changedTouches[0].clientX;
         if (Math.abs(diff) > 60) {
             diff > 0 ? goTo(current + 1) : goTo(current - 1);
         }
     });
 
-    // Click to advance (except on code blocks and nav)
-    document.addEventListener('click', (e) => {
-        if (e.target.closest('.nav-bar, .nav-dots, .code-block, a, button, .card')) return;
+    // Click to advance (left half = back, right half = forward)
+    // Exclude interactive elements
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.nav-bar, .nav-dots, .nav-btn, .code-block, a, button, .card')) return;
         const x = e.clientX / window.innerWidth;
         x > 0.5 ? goTo(current + 1) : goTo(current - 1);
     });
 
     // Init
     progress.style.width = '0%';
-    counter.textContent = `1 / ${total}`;
+    counter.textContent = '1 / ' + total;
 </script>
 
 </body>
