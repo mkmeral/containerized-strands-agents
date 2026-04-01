@@ -690,9 +690,7 @@
 
         <div class="two-col fade-in delay-3" style="max-width: 1100px;">
             <div class="col">
-                <div class="code-block" style="margin-bottom: 20px;">
-                    <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
-                    <span class="code-label">Python</span>
+                <div class="code-block" style="margin-bottom: 20px;"><div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div><span class="code-label">Python</span>
 <span class="kw">from</span> <span class="imp">strands</span> <span class="kw">import</span> <span class="cls">Agent</span>
 <span class="kw">from</span> <span class="imp">strands.tools.mcp</span> <span class="kw">import</span> <span class="cls">MCPClient</span>
 
@@ -845,9 +843,7 @@ agent(<span class="str">"Analyze the latest PRs"</span>)
         <div class="two-col fade-in delay-2">
             <div class="col">
                 <h3>Before: Fire-and-Forget</h3>
-                <div class="code-block" style="margin-bottom: 20px;">
-                    <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
-                    <span class="code-label">Python</span>
+                <div class="code-block" style="margin-bottom: 20px;"><div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div><span class="code-label">Python</span>
 <span class="cm"># Dispatch — no tracking</span>
 result = <span class="fn">send_message</span>(<span class="str">"researcher"</span>, <span class="str">"find issues"</span>)
 <span class="cm"># → {"status": "dispatched"}</span>
@@ -870,9 +866,7 @@ result = <span class="fn">send_message</span>(<span class="str">"researcher"</sp
 
             <div class="col">
                 <h3 style="color: var(--green);">After: MCP Tasks</h3>
-                <div class="code-block" style="margin-bottom: 20px;">
-                    <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
-                    <span class="code-label">Python</span>
+                <div class="code-block" style="margin-bottom: 20px;"><div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div><span class="code-label">Python</span>
 <span class="cm"># Dispatch → returns Task object</span>
 result = <span class="fn">send_message</span>(<span class="str">"researcher"</span>, <span class="str">"find issues"</span>)
 <span class="cm"># → {taskId: "task-abc", status: "working"}</span>
@@ -1015,9 +1009,7 @@ tasks/<span class="fn">list</span>()         <span class="cm"># → all active t
         <div class="two-col fade-in delay-2" style="max-width: 1100px;">
             <div class="col">
                 <h3>Agent Definition (~15 lines)</h3>
-                <div class="code-block">
-                    <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
-                    <span class="code-label">agent.py</span>
+                <div class="code-block"><div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div><span class="code-label">agent.py</span>
 <span class="kw">from</span> <span class="imp">strands</span> <span class="kw">import</span> <span class="cls">Agent</span>
 <span class="kw">from</span> <span class="imp">strands.tools.mcp</span> <span class="kw">import</span> <span class="cls">MCPClient</span>
 <span class="kw">from</span> <span class="imp">strands.session</span> <span class="kw">import</span> <span class="cls">FileSessionManager</span>
@@ -1040,9 +1032,7 @@ tasks/<span class="fn">list</span>()         <span class="cm"># → all active t
 
             <div class="col">
                 <h3>MCP Server (~20 lines)</h3>
-                <div class="code-block">
-                    <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
-                    <span class="code-label">server.py</span>
+                <div class="code-block"><div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div><span class="code-label">server.py</span>
 <span class="kw">from</span> <span class="imp">fastmcp</span> <span class="kw">import</span> <span class="cls">FastMCP</span>
 
 mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
@@ -1130,9 +1120,7 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
             </svg>
         </div>
 
-        <div class="code-block fade-in delay-3" style="max-width: 800px; font-size: 14px;">
-            <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
-            <span class="code-label">File Persistence</span>
+        <div class="code-block fade-in delay-3" style="max-width: 800px; font-size: 14px;"><div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div><span class="code-label">File Persistence</span>
 <span class="cm"># data/mcp_tasks.json — survives restarts, included in snapshots</span>
 {
   <span class="str">"task-abc123"</span>: {
@@ -1198,9 +1186,7 @@ mcp = <span class="cls">FastMCP</span>(<span class="str">"Agent Host"</span>)
             </svg>
         </div>
 
-        <div class="code-block fade-in delay-4" style="max-width: 750px; font-size: 14px;">
-            <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
-            <span class="code-label">CLI</span>
+        <div class="code-block fade-in delay-4" style="max-width: 750px; font-size: 14px;"><div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div><span class="code-label">CLI</span>
 <span class="cm"># Snapshot from local Docker</span>
 $ containerized-strands-agents <span class="fn">snapshot</span> --data-dir ./researcher --output snap.zip
 
