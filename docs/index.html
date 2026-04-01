@@ -60,10 +60,11 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            padding: 60px 80px;
+            padding: 60px 80px 80px;
             opacity: 0;
             pointer-events: none;
             transform: translateX(40px);
+            overflow-y: auto;
         }
 
         .slide.active {
@@ -588,6 +589,18 @@
         }
 
         /* ═══════════════════════════════════════════════════════════════
+           ORIGIN STORY
+           ═══════════════════════════════════════════════════════════════ */
+        .slide code {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-glow);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
            RESPONSIVE
            ═══════════════════════════════════════════════════════════════ */
         @media (max-width: 900px) {
@@ -737,31 +750,56 @@ agent(<span class="str">"Analyze the latest PRs"</span>)
          ═══════════════════════════════════════════════════════════════ -->
     <section class="slide" data-slide="2">
         <div class="section-label fade-in">The Problem</div>
-        <h2 class="fade-in delay-1">Single-Agent Architectures<br>Hit a Wall</h2>
-        <p class="slide-subtitle fade-in delay-2" style="margin-bottom:32px;">
-            As agent capabilities grow, one-agent-does-everything approaches break down.
+        <h2 class="fade-in delay-1">The <span class="gradient">Last 10%</span> Problem</h2>
+        <p class="slide-subtitle fade-in delay-2" style="margin-bottom: 28px;">
+            I built this for my own needs. Here's the background.
         </p>
 
-        <div class="card-grid cols-4 fade-in delay-3">
-            <div class="card">
-                <div class="card-icon">🧠</div>
-                <div class="card-title">Context Bloat</div>
-                <div class="card-desc">50+ tools saturate the context window. Performance degrades, latency spikes, costs multiply.</div>
+        <div class="two-col fade-in delay-3" style="max-width: 1100px; align-items: stretch;">
+            <div class="col" style="flex: 1.1;">
+                <div class="card" style="border-left: 3px solid var(--accent); height: 100%; display: flex; flex-direction: column; gap: 20px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="font-size: 28px;">🛠️</div>
+                        <div class="card-title" style="color: var(--accent-glow); margin-bottom: 0;">Origin Story</div>
+                    </div>
+                    <div class="card-desc" style="font-size: 15px; line-height: 1.75;">
+                        When we had <code>strands-command</code> in devtools, the problem was always the <strong style="color: var(--accent-glow);">last 10%</strong> —
+                        pulling repos, setting up environments, configuring tools. Everything before the agent could actually start working.
+                    </div>
+                    <div class="card-desc" style="font-size: 15px; line-height: 1.75;">
+                        So I built <strong style="color: var(--teal);">containerized agents</strong> as a devtool.
+                        Agents run locally in Docker — I can see the files, change them, iterate. It's hands-on.
+                    </div>
+                    <div class="card-desc" style="font-size: 15px; line-height: 1.75;">
+                        <strong style="color: var(--amber);">Why MCP (not A2A)?</strong> I wanted to share these agents with colleagues who use different devtools —
+                        Kiro, Claude Code, whatever. MCP is the universal protocol that works across all of them.
+                    </div>
+                </div>
             </div>
-            <div class="card">
-                <div class="card-icon">⏳</div>
-                <div class="card-title">No Parallelism</div>
-                <div class="card-desc">Sequential tool calls block. A research task and a coding task can't run simultaneously.</div>
-            </div>
-            <div class="card">
-                <div class="card-icon">🔓</div>
-                <div class="card-title">No Isolation</div>
-                <div class="card-desc">All tools share one environment. A rogue shell command can destroy the workspace.</div>
-            </div>
-            <div class="card">
-                <div class="card-icon">📦</div>
-                <div class="card-title">Not Portable</div>
-                <div class="card-desc">Agent state is tied to the runtime. Can't move a running agent between environments.</div>
+
+            <div class="col" style="flex: 0.9;">
+                <div style="display: flex; flex-direction: column; gap: 12px; height: 100%;">
+                    <div class="card" style="flex: 1;">
+                        <div class="card-icon">🧠</div>
+                        <div class="card-title">Context Bloat</div>
+                        <div class="card-desc">50+ tools saturate the context window. Performance degrades, costs multiply.</div>
+                    </div>
+                    <div class="card" style="flex: 1;">
+                        <div class="card-icon">⏳</div>
+                        <div class="card-title">No Parallelism</div>
+                        <div class="card-desc">Sequential tool calls block. Research and coding can't run simultaneously.</div>
+                    </div>
+                    <div class="card" style="flex: 1;">
+                        <div class="card-icon">🔓</div>
+                        <div class="card-title">No Isolation</div>
+                        <div class="card-desc">All tools share one environment. A rogue command can destroy the workspace.</div>
+                    </div>
+                    <div class="card" style="flex: 1;">
+                        <div class="card-icon">📦</div>
+                        <div class="card-title">Not Portable</div>
+                        <div class="card-desc">Agent state is tied to the runtime. Can't move agents between environments.</div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
