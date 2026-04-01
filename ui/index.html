@@ -4,286 +4,271 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Containerized Strands Agents</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
+        /* ═══════════════════════════════════════════════════════════════
+           RESET & VARIABLES — Matching presentation theme
+           ═══════════════════════════════════════════════════════════════ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         :root {
-            /* Light theme (default) */
-            --primary: #007bff;
-            --primary-hover: #0056b3;
-            --primary-glow: rgba(0, 123, 255, 0.3);
-            --background: #f5f5f5;
-            --surface: #ffffff;
-            --surface-hover: #e9ecef;
-            --surface-alt: #fafafa;
-            --foreground: #333333;
-            --foreground-muted: #6c757d;
-            --border: #e0e0e0;
-            --border-light: #e9ecef;
-            --success: #28a745;
-            --success-bg: #d4edda;
-            --success-text: #155724;
-            --error: #dc3545;
-            --error-bg: #f8d7da;
-            --error-text: #721c24;
-            --warning: #ffc107;
-            --warning-text: #000000;
+            --bg:           #0a0e1a;
+            --bg-card:      #111827;
+            --bg-code:      #0d1117;
+            --bg-input:     #0f1623;
+            --border:       #1e293b;
+            --border-focus: #6366f1;
+            --text:         #e2e8f0;
+            --text-dim:     #94a3b8;
+            --text-muted:   #64748b;
+            --accent:       #6366f1;
+            --accent-glow:  #818cf8;
+            --accent-bg:    rgba(99, 102, 241, 0.1);
+            --accent-bg2:   rgba(99, 102, 241, 0.15);
+            --teal:         #2dd4bf;
+            --teal-bg:      rgba(45, 212, 191, 0.1);
+            --amber:        #fbbf24;
+            --amber-bg:     rgba(251, 191, 36, 0.1);
+            --rose:         #fb7185;
+            --rose-bg:      rgba(251, 113, 133, 0.1);
+            --sky:          #38bdf8;
+            --green:        #4ade80;
+            --green-bg:     rgba(74, 222, 128, 0.1);
+            --purple:       #a78bfa;
+            --orange:       #fb923c;
+
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+            --sidebar-width: 320px;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --radius-xs: 6px;
         }
-        
-        [data-theme="dark"] {
-            /* Dark theme - Strands color scheme (muted) */
-            --primary: #00b368;
-            --primary-hover: #009955;
-            --primary-glow: rgba(0, 179, 104, 0.25);
-            --background: #0a0a0a;
-            --surface: rgba(25, 25, 25, 0.95);
-            --surface-hover: rgba(45, 45, 45, 0.95);
-            --surface-alt: rgba(18, 18, 18, 0.98);
-            --foreground: #d4d4d4;
-            --foreground-muted: #888888;
-            --border: rgba(0, 179, 104, 0.2);
-            --border-light: rgba(0, 179, 104, 0.1);
-            --success: #00b368;
-            --success-bg: rgba(0, 179, 104, 0.12);
-            --success-text: #00b368;
-            --error: #e05555;
-            --error-bg: rgba(224, 85, 85, 0.12);
-            --error-text: #e88888;
-            --warning: #d4a800;
-            --warning-text: #000000;
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-sans);
+            -webkit-font-smoothing: antialiased;
         }
-        
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--background);
-            color: var(--foreground);
-            height: 100vh;
             display: flex;
-            transition: background-color 0.3s, color 0.3s;
         }
-        
+
+        /* ═══════════════════════════════════════════════════════════════
+           SCROLLBAR
+           ═══════════════════════════════════════════════════════════════ */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ═══════════════════════════════════════════════════════════════
+           SIDEBAR
+           ═══════════════════════════════════════════════════════════════ */
         .sidebar {
-            width: 300px;
-            background: var(--surface);
+            width: var(--sidebar-width);
+            background: var(--bg-card);
             border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            transition: background-color 0.3s, border-color 0.3s;
+            flex-shrink: 0;
         }
-        
+
         .sidebar-header {
             padding: 20px;
             border-bottom: 1px solid var(--border);
-            background: var(--surface-alt);
         }
-        
-        .sidebar-header h1 {
-            font-size: 18px;
-            color: var(--foreground);
-            margin-bottom: 10px;
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
         }
-        
+
+        .sidebar-brand svg {
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand h1 {
+            font-size: 16px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-glow), var(--teal));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
         .header-controls {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
+            gap: 8px;
         }
-        
-        .theme-toggle {
-            background: transparent;
+
+        .btn-icon {
+            background: rgba(99, 102, 241, 0.08);
             border: 1px solid var(--border);
-            color: var(--foreground-muted);
-            padding: 6px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s;
-        }
-        
-        .theme-toggle:hover {
-            background: var(--surface-hover);
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-        
-        .refresh-btn {
-            background: var(--primary);
-            color: var(--background);
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+            color: var(--text-dim);
+            padding: 7px 12px;
+            border-radius: var(--radius-xs);
             cursor: pointer;
             font-size: 12px;
+            font-family: var(--font-sans);
+            font-weight: 500;
             transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
-        
-        .refresh-btn:hover {
-            background: var(--primary-hover);
-            box-shadow: 0 0 10px var(--primary-glow);
+
+        .btn-icon:hover {
+            background: var(--accent-bg);
+            border-color: var(--accent);
+            color: var(--accent-glow);
         }
-        
+
         .filter-controls {
-            margin-top: 10px;
+            margin-top: 12px;
         }
-        
+
         .filter-checkbox {
             display: flex;
             align-items: center;
             gap: 6px;
-            font-size: 12px;
-            color: var(--foreground-muted);
+            font-size: 11px;
+            color: var(--text-dim);
+            cursor: pointer;
         }
-        
+
         .filter-checkbox input[type="checkbox"] {
-            margin: 0;
-            accent-color: var(--primary);
+            accent-color: var(--accent);
         }
-        
-        .new-agent-btn {
-            background: var(--success);
-            color: var(--background);
-            border: none;
+
+        /* Sidebar Action Buttons */
+        .sidebar-actions {
             padding: 12px;
-            margin: 10px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: all 0.2s;
-        }
-        
-        .new-agent-btn:hover {
-            filter: brightness(1.1);
-            box-shadow: 0 0 15px var(--primary-glow);
-        }
-        
-        .new-agent-btn::before {
-            content: '+';
-            font-size: 18px;
-            font-weight: bold;
-        }
-        
-        .inbox-btn {
-            background: var(--surface-hover);
-            color: var(--foreground);
-            border: 1px solid var(--border);
-            padding: 10px 12px;
-            margin: 0 10px 10px 10px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: all 0.2s;
-        }
-        
-        .inbox-btn:hover {
-            background: var(--surface-hover);
-            border-color: var(--primary);
-        }
-        
-        .inbox-btn.active {
-            background: var(--primary);
-            color: var(--background);
-            border-color: var(--primary);
-        }
-        
-        .inbox-btn .unread-count {
-            display: inline-block;
-            background: var(--error);
-            color: white;
-            font-size: 10px;
-            padding: 1px 6px;
-            border-radius: 10px;
-        }
-        
-        .inbox-view {
             display: flex;
             flex-direction: column;
-            height: 100%;
-            background: var(--surface-alt);
+            gap: 8px;
         }
-        
-        .inbox-header {
-            padding: 20px;
-            border-bottom: 1px solid var(--border);
-            background: var(--surface);
+
+        .new-agent-btn {
+            background: linear-gradient(135deg, var(--accent), #4f46e5);
+            color: white;
+            border: none;
+            padding: 11px 16px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: var(--font-sans);
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
         }
-        
-        .inbox-header h2 {
-            margin: 0;
-            font-size: 18px;
-            color: var(--foreground);
+
+        .new-agent-btn:hover {
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+            transform: translateY(-1px);
         }
-        
-        .inbox-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
+
+        .new-agent-btn::before {
+            content: '+';
+            font-size: 16px;
+            font-weight: 700;
         }
-        
+
+        .inbox-btn {
+            background: var(--bg);
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+            padding: 10px 16px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: var(--font-sans);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .inbox-btn:hover {
+            background: var(--accent-bg);
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        .inbox-btn.active {
+            background: var(--accent-bg2);
+            border-color: var(--accent);
+            color: var(--accent-glow);
+        }
+
+        .unread-count {
+            display: inline-block;
+            background: var(--rose);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 10px;
+            line-height: 1.4;
+        }
+
+        /* Agent List */
         .agents-list {
             flex: 1;
             overflow-y: auto;
-            padding: 10px;
+            padding: 8px 12px;
         }
-        
+
         .agent-item {
-            padding: 12px;
-            margin-bottom: 8px;
-            background: var(--surface-alt);
-            border: 1px solid var(--border-light);
-            border-radius: 6px;
+            padding: 14px;
+            margin-bottom: 6px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
             cursor: pointer;
             transition: all 0.2s;
         }
-        
+
         .agent-item:hover {
-            background: var(--surface-hover);
-            border-color: var(--border);
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.04);
         }
-        
+
         .agent-item.active {
-            background: var(--primary);
-            color: var(--background);
-            border-color: var(--primary);
-            box-shadow: 0 0 20px var(--primary-glow);
+            background: var(--accent-bg2);
+            border-color: var(--accent);
+            box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
         }
-        
-        .agent-item.active .agent-status,
-        .agent-item.active .agent-meta {
-            color: var(--background);
-            opacity: 0.9;
-        }
-        
-        .agent-info {
-            flex: 1;
-        }
-        
+
         .agent-id {
-            font-weight: 500;
+            font-weight: 600;
             font-size: 14px;
+            color: var(--text);
         }
-        
+
+        .agent-item.active .agent-id {
+            color: var(--accent-glow);
+        }
+
         .agent-description {
             font-size: 12px;
-            color: var(--foreground-muted);
+            color: var(--text-dim);
             margin-top: 4px;
             line-height: 1.3;
             display: -webkit-box;
@@ -291,556 +276,664 @@
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        
-        .agent-item.active .agent-description {
-            color: var(--background);
-            opacity: 0.85;
-        }
-        
+
         .agent-status {
-            font-size: 12px;
-            opacity: 0.7;
-            margin-top: 2px;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        
+
+        .agent-meta {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            font-family: var(--font-mono);
+        }
+
+        .agent-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 10px;
+            font-family: var(--font-sans);
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: var(--accent-bg);
+            border-color: var(--accent);
+            color: var(--accent-glow);
+        }
+
+        .copy-btn.copied {
+            background: var(--green-bg);
+            border-color: var(--green);
+            color: var(--green);
+        }
+
         .unread-dot {
             display: inline-block;
             width: 8px;
             height: 8px;
-            background: var(--primary);
+            background: var(--accent);
             border-radius: 50%;
-            margin-right: 6px;
+            margin-right: 4px;
+            box-shadow: 0 0 6px rgba(99, 102, 241, 0.5);
             flex-shrink: 0;
         }
-        
-        .agent-item.active .unread-dot {
-            background: var(--background);
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
         }
-        
+
+        .status-running {
+            background: var(--green-bg);
+            color: var(--green);
+        }
+
+        .status-stopped {
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--text-muted);
+        }
+
+        .status-error {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .status-processing {
+            background: var(--amber-bg);
+            color: var(--amber);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           MAIN CONTENT
+           ═══════════════════════════════════════════════════════════════ */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           INBOX VIEW
+           ═══════════════════════════════════════════════════════════════ */
+        .inbox-view {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .inbox-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-card);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .inbox-header h2 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .inbox-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            background: var(--bg);
+        }
+
         .inbox-item {
-            padding: 12px;
+            padding: 14px 16px;
             margin-bottom: 8px;
-            background: var(--surface-alt);
-            border: 1px solid var(--border-light);
-            border-radius: 6px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
             cursor: pointer;
             transition: all 0.2s;
         }
-        
+
         .inbox-item:hover {
-            background: var(--surface-hover);
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.04);
         }
-        
+
         .inbox-item.unread {
-            background: var(--surface);
-            border-color: var(--primary);
-            border-left: 3px solid var(--primary);
+            border-left: 3px solid var(--accent);
+            background: rgba(99, 102, 241, 0.06);
         }
-        
+
         .inbox-item-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 6px;
         }
-        
+
         .inbox-item-agent {
             display: flex;
             align-items: center;
-            font-weight: 500;
-            font-size: 14px;
-            color: var(--foreground);
-        }
-        
-        .inbox-item.unread .inbox-item-agent {
             font-weight: 600;
+            font-size: 14px;
+            color: var(--text);
+            gap: 6px;
         }
-        
+
+        .inbox-item.unread .inbox-item-agent {
+            color: var(--accent-glow);
+        }
+
         .inbox-item-time {
             font-size: 11px;
-            color: var(--foreground-muted);
+            color: var(--text-muted);
+            font-family: var(--font-mono);
         }
-        
+
         .inbox-item-preview {
             font-size: 13px;
-            color: var(--foreground-muted);
+            color: var(--text-dim);
             line-height: 1.4;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        
-        .inbox-item.unread .inbox-item-preview {
-            color: var(--foreground);
-        }
-        
+
         .inbox-empty {
             text-align: center;
-            padding: 40px 20px;
-            color: var(--foreground-muted);
+            padding: 60px 20px;
+            color: var(--text-dim);
         }
-        
+
         .inbox-empty-icon {
             font-size: 48px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            opacity: 0.6;
         }
-        
-        .agent-meta {
-            font-size: 11px;
-            color: var(--foreground-muted);
-            margin-top: 4px;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        
-        .agent-meta-row {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        
-        .copy-btn {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--foreground-muted);
-            padding: 2px 6px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 10px;
-            margin-left: 4px;
-            transition: all 0.2s;
-        }
-        
-        .copy-btn:hover {
-            background: var(--surface-hover);
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-        
-        .agent-item.active .copy-btn {
-            border-color: rgba(0, 0, 0, 0.3);
-            color: var(--background);
-        }
-        
-        .agent-item.active .copy-btn:hover {
-            background: rgba(0, 0, 0, 0.2);
-            border-color: rgba(0, 0, 0, 0.5);
-        }
-        
-        .copy-btn.copied {
-            background: var(--success);
-            color: var(--background);
-            border-color: var(--success);
-        }
-        
-        .agent-item.active .copy-btn.copied {
-            background: rgba(0, 0, 0, 0.3);
-            border-color: rgba(0, 0, 0, 0.3);
-        }
-        
-        .status-badge {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 10px;
-            font-size: 10px;
-            font-weight: 500;
-            text-transform: uppercase;
-        }
-        
-        .status-running {
-            background: var(--success);
-            color: var(--background);
-        }
-        
-        .status-stopped {
-            background: var(--foreground-muted);
-            color: var(--background);
-        }
-        
-        .status-error {
-            background: var(--error);
-            color: white;
-        }
-        
-        .status-processing {
-            background: var(--warning);
-            color: var(--warning-text);
-            animation: pulse 1.5s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        
-        .message.tool_use,
-        .message.tool_result {
-            margin-bottom: 4px;
-        }
-        
-        .message.tool_use .message-content,
-        .message.tool_result .message-content {
-            background: transparent;
-            border: none;
-            padding: 2px 0;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        .message.tool_use .message-header,
-        .message.tool_result .message-header {
-            display: none;
-        }
-        
-        .tool-icon {
-            font-size: 12px;
-            color: var(--foreground-muted);
-        }
-        
-        .tool-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 500;
-        }
-        
-        .tool-badge.tool-name {
-            background: var(--surface-hover);
-            color: var(--foreground-muted);
-        }
-        
-        .tool-badge.status-success {
-            background: var(--success-bg);
-            color: var(--success-text);
-        }
-        
-        .tool-badge.status-error {
-            background: var(--error-bg);
-            color: var(--error-text);
-        }
-        
-        .tool-badge.status-unknown {
-            background: var(--surface-hover);
-            color: var(--foreground-muted);
-        }
-        
-        .tool-params {
-            font-size: 11px;
-            color: var(--foreground-muted);
-            font-family: monospace;
-            max-width: 400px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: var(--surface);
-            transition: background-color 0.3s;
-        }
-        
-        .chat-header {
-            padding: 20px;
-            border-bottom: 1px solid var(--border);
-            background: var(--surface-alt);
-        }
-        
-        .chat-header h2 {
-            color: var(--foreground);
-        }
-        
+
+        /* ═══════════════════════════════════════════════════════════════
+           NO AGENT PLACEHOLDER
+           ═══════════════════════════════════════════════════════════════ */
         .no-agent {
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100%;
-            color: var(--foreground-muted);
-            font-size: 18px;
+            color: var(--text-dim);
+            gap: 12px;
         }
-        
+
+        .no-agent-icon {
+            font-size: 48px;
+            opacity: 0.3;
+        }
+
+        .no-agent-text {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           CHAT CONTAINER
+           ═══════════════════════════════════════════════════════════════ */
         .chat-container {
             flex: 1;
             display: flex;
             flex-direction: column;
             height: 100%;
         }
-        
+
+        .chat-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .chat-header .agent-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            background: var(--teal-bg);
+            color: var(--teal);
+        }
+
+        /* Messages Area */
         .messages-area {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
-            background: var(--surface-alt);
+            padding: 24px;
+            background: var(--bg);
         }
-        
+
         .message {
             margin-bottom: 20px;
             display: flex;
             flex-direction: column;
         }
-        
+
         .message-header {
-            font-size: 12px;
-            color: var(--foreground-muted);
-            margin-bottom: 5px;
-            font-weight: 500;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            color: var(--text-muted);
         }
-        
+
+        .message.user .message-header {
+            color: var(--accent-glow);
+        }
+
+        .message.assistant .message-header {
+            color: var(--teal);
+        }
+
         .message-content {
-            background: var(--surface);
-            padding: 15px;
-            border-radius: 8px;
+            background: var(--bg-card);
+            padding: 16px 20px;
+            border-radius: var(--radius);
             border: 1px solid var(--border);
             white-space: pre-wrap;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.5;
-            color: var(--foreground);
+            font-family: var(--font-sans);
+            line-height: 1.6;
+            font-size: 14px;
+            color: var(--text);
         }
-        
+
         .message.user .message-content {
-            background: var(--primary);
-            color: var(--background);
-            border-color: var(--primary);
+            background: var(--accent-bg2);
+            border-color: var(--accent);
+            color: var(--text);
         }
-        
+
+        /* Tool messages */
+        .message.tool_use,
+        .message.tool_result {
+            margin-bottom: 4px;
+        }
+
+        .message.tool_use .message-content,
+        .message.tool_result .message-content {
+            background: transparent;
+            border: none;
+            padding: 3px 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .message.tool_use .message-header,
+        .message.tool_result .message-header {
+            display: none;
+        }
+
+        .tool-icon {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .tool-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: var(--radius-xs);
+            font-size: 11px;
+            font-weight: 600;
+            font-family: var(--font-mono);
+        }
+
+        .tool-badge.tool-name {
+            background: var(--accent-bg);
+            color: var(--accent-glow);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .tool-badge.status-success {
+            background: var(--green-bg);
+            color: var(--green);
+        }
+
+        .tool-badge.status-error {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .tool-badge.status-unknown {
+            background: rgba(100, 116, 139, 0.1);
+            color: var(--text-muted);
+        }
+
+        .tool-params {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            max-width: 500px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           INPUT AREA
+           ═══════════════════════════════════════════════════════════════ */
         .input-area {
-            padding: 20px;
+            padding: 16px 24px;
             border-top: 1px solid var(--border);
-            background: var(--surface);
+            background: var(--bg-card);
         }
-        
+
         .input-row {
             display: flex;
             gap: 10px;
         }
-        
+
         .message-input {
             flex: 1;
-            padding: 12px;
+            padding: 12px 16px;
             border: 1px solid var(--border);
-            border-radius: 6px;
-            font-family: inherit;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-sans);
             font-size: 14px;
             resize: none;
-            min-height: 60px;
-            background: var(--surface-alt);
-            color: var(--foreground);
+            min-height: 56px;
+            background: var(--bg-input);
+            color: var(--text);
             transition: all 0.2s;
+            line-height: 1.5;
         }
-        
+
         .message-input:focus {
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-glow);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
         }
-        
+
         .message-input::placeholder {
-            color: var(--foreground-muted);
+            color: var(--text-muted);
         }
-        
+
         .send-btn {
-            background: var(--primary);
-            color: var(--background);
+            background: linear-gradient(135deg, var(--accent), #4f46e5);
+            color: white;
             border: none;
-            padding: 12px 20px;
-            border-radius: 6px;
+            padding: 12px 24px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: var(--font-sans);
             height: fit-content;
             align-self: flex-end;
             transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
         }
-        
+
         .send-btn:hover {
-            background: var(--primary-hover);
-            box-shadow: 0 0 15px var(--primary-glow);
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+            transform: translateY(-1px);
         }
-        
+
         .send-btn:disabled {
-            background: var(--foreground-muted);
+            background: var(--border);
+            color: var(--text-muted);
             cursor: not-allowed;
             box-shadow: none;
+            transform: none;
         }
-        
+
         .options-row {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             margin-top: 10px;
         }
-        
+
         .option-input {
             flex: 1;
-            padding: 8px;
+            padding: 8px 12px;
             border: 1px solid var(--border);
-            border-radius: 4px;
+            border-radius: var(--radius-xs);
             font-size: 12px;
-            background: var(--surface-alt);
-            color: var(--foreground);
+            font-family: var(--font-mono);
+            background: var(--bg-input);
+            color: var(--text);
+            transition: all 0.2s;
         }
-        
+
         .option-input::placeholder {
-            color: var(--foreground-muted);
+            color: var(--text-muted);
         }
-        
+
         .option-input:focus {
             outline: none;
-            border-color: var(--primary);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
         }
-        
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: var(--foreground-muted);
-            font-style: italic;
-        }
-        
-        .error {
-            background: var(--error-bg);
-            color: var(--error-text);
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px;
-            border: 1px solid var(--error);
-        }
-        
+
+        /* ═══════════════════════════════════════════════════════════════
+           NEW AGENT FORM
+           ═══════════════════════════════════════════════════════════════ */
         .new-agent-form {
-            padding: 20px;
+            padding: 32px;
             display: flex;
             flex-direction: column;
             height: 100%;
-            background: var(--surface);
+            background: var(--bg);
+            overflow-y: auto;
         }
-        
+
         .form-header {
-            padding: 20px 0;
+            padding-bottom: 20px;
             border-bottom: 1px solid var(--border);
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
-        
+
         .form-header h2 {
-            font-size: 18px;
-            color: var(--foreground);
-            margin-bottom: 10px;
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
         }
-        
+
         .form-header p {
-            color: var(--foreground-muted);
+            color: var(--text-dim);
             font-size: 14px;
+            line-height: 1.5;
         }
-        
+
         .form-group {
             margin-bottom: 20px;
         }
-        
+
         .form-label {
             display: block;
-            font-weight: 500;
-            margin-bottom: 5px;
-            color: var(--foreground);
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 6px;
+            color: var(--text);
         }
-        
+
         .form-input {
             width: 100%;
-            padding: 12px;
+            padding: 12px 16px;
             border: 1px solid var(--border);
-            border-radius: 6px;
-            font-family: inherit;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-sans);
             font-size: 14px;
-            background: var(--surface-alt);
-            color: var(--foreground);
+            background: var(--bg-card);
+            color: var(--text);
+            transition: all 0.2s;
         }
-        
+
         .form-input:focus {
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-glow);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
         }
-        
+
         .form-input::placeholder {
-            color: var(--foreground-muted);
+            color: var(--text-muted);
         }
-        
+
         .form-textarea {
             resize: vertical;
             min-height: 80px;
+            line-height: 1.5;
         }
-        
+
         .form-textarea.large {
             min-height: 120px;
         }
-        
-        .form-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: auto;
-            padding-top: 20px;
-        }
-        
-        .btn-primary {
-            background: var(--primary);
-            color: var(--background);
-            border: none;
-            padding: 12px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        
-        .btn-primary:hover {
-            background: var(--primary-hover);
-            box-shadow: 0 0 15px var(--primary-glow);
-        }
-        
-        .btn-primary:disabled {
-            background: var(--foreground-muted);
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-        
-        .btn-secondary {
-            background: var(--surface-hover);
-            color: var(--foreground);
-            border: 1px solid var(--border);
-            padding: 12px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        
-        .btn-secondary:hover {
-            background: var(--surface-alt);
-            border-color: var(--primary);
-        }
-        
+
         .form-help {
-            font-size: 12px;
-            color: var(--foreground-muted);
+            font-size: 11px;
+            color: var(--text-muted);
             margin-top: 5px;
         }
-        
+
+        .form-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: auto;
+            padding-top: 24px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #4f46e5);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:disabled {
+            background: var(--border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+            padding: 12px 24px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: var(--font-sans);
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           ERROR TOAST
+           ═══════════════════════════════════════════════════════════════ */
+        .error {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--rose);
+            color: var(--rose);
+            padding: 12px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            box-shadow: 0 4px 20px rgba(251, 113, 133, 0.2);
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           RESPONSIVE
+           ═══════════════════════════════════════════════════════════════ */
         @media (max-width: 768px) {
             body {
                 flex-direction: column;
             }
-            
             .sidebar {
                 width: 100%;
-                height: 200px;
+                height: 220px;
             }
-            
             .main-content {
-                height: calc(100vh - 200px);
+                height: calc(100vh - 220px);
             }
         }
     </style>
@@ -848,12 +941,18 @@
 <body>
     <div class="sidebar">
         <div class="sidebar-header">
-            <h1>Agents</h1>
+            <div class="sidebar-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="#6366f1"/>
+                    <path d="M2 17l10 5 10-5" stroke="#2dd4bf"/>
+                    <path d="M2 12l10 5 10-5" stroke="#818cf8"/>
+                </svg>
+                <h1>Strands Agents</h1>
+            </div>
             <div class="header-controls">
-                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light mode">
-                    <span id="theme-icon">🌙</span>
+                <button class="btn-icon" onclick="loadAgents()" title="Refresh agents">
+                    ↻ Refresh
                 </button>
-                <button class="refresh-btn" onclick="loadAgents()">Refresh</button>
             </div>
             <div class="filter-controls">
                 <label class="filter-checkbox">
@@ -862,10 +961,12 @@
                 </label>
             </div>
         </div>
-        <button class="new-agent-btn" onclick="showNewAgentForm()">New Agent</button>
-        <button class="inbox-btn" id="inbox-btn" onclick="showInbox()">
-            📥 Inbox <span class="unread-count" id="unread-count" style="display: none;">0</span>
-        </button>
+        <div class="sidebar-actions">
+            <button class="new-agent-btn" onclick="showNewAgentForm()">New Agent</button>
+            <button class="inbox-btn" id="inbox-btn" onclick="showInbox()">
+                📥 Inbox <span class="unread-count" id="unread-count" style="display: none;">0</span>
+            </button>
+        </div>
         <div class="agents-list" id="agents-list">
             <div class="loading">Loading agents...</div>
         </div>
@@ -875,7 +976,7 @@
         <div id="inbox-view" class="inbox-view">
             <div class="inbox-header">
                 <h2>📥 Inbox</h2>
-                <button class="refresh-btn" onclick="loadInbox()">Refresh</button>
+                <button class="btn-icon" onclick="loadInbox()">↻ Refresh</button>
             </div>
             <div class="inbox-content" id="inbox-content">
                 <div class="loading">Loading inbox...</div>
@@ -883,7 +984,8 @@
         </div>
         
         <div id="no-agent" class="no-agent" style="display: none;">
-            Select an agent to start chatting
+            <div class="no-agent-icon">🧬</div>
+            <div class="no-agent-text">Select an agent to start chatting</div>
         </div>
         
         <div id="chat-container" class="chat-container" style="display: none;">
@@ -934,65 +1036,26 @@
         let currentAgentId = null;
         let refreshInterval = null;
         let messagesInterval = null;
-        let allAgents = []; // Store all agents for filtering
-        let inboxItems = []; // Store inbox items
-        let lastMessagesHash = null; // Track message changes to avoid unnecessary re-renders
-        let lastAgentsHash = null; // Track agent list changes
-        let lastInboxHash = null; // Track inbox changes
-        
-        // Theme management
-        function getPreferredTheme() {
-            const stored = localStorage.getItem('theme');
-            if (stored) return stored;
-            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
-        
-        function setTheme(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            updateThemeIcon(theme);
-        }
-        
-        function updateThemeIcon(theme) {
-            const icon = document.getElementById('theme-icon');
-            if (icon) {
-                icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-            }
-        }
-        
-        function toggleTheme() {
-            const current = document.documentElement.getAttribute('data-theme') || 'light';
-            const next = current === 'dark' ? 'light' : 'dark';
-            setTheme(next);
-        }
-        
-        // Initialize theme on page load
-        (function() {
-            const theme = getPreferredTheme();
-            setTheme(theme);
-        })();
+        let allAgents = [];
+        let inboxItems = [];
+        let lastMessagesHash = null;
+        let lastAgentsHash = null;
+        let lastInboxHash = null;
         
         // Show inbox view
         function showInbox() {
             currentAgentId = null;
-            lastMessagesHash = null; // Reset messages hash
+            lastMessagesHash = null;
             
-            // Remove new agent form if open
             const newAgentForm = document.getElementById('new-agent-form');
             if (newAgentForm) newAgentForm.remove();
             
-            // Update UI
             document.getElementById('inbox-view').style.display = 'flex';
             document.getElementById('no-agent').style.display = 'none';
             document.getElementById('chat-container').style.display = 'none';
             
-            // Update inbox button state
             document.getElementById('inbox-btn').classList.add('active');
-            
-            // Clear agent selection in sidebar
             renderAgents(getFilteredAndSortedAgents());
-            
-            // Load inbox (force render when explicitly showing)
             loadInbox(true);
         }
         
@@ -1000,12 +1063,11 @@
         function startAutoRefresh() {
             refreshInterval = setInterval(() => {
                 loadAgents();
-                // Only refresh inbox view if it's visible
                 const inboxView = document.getElementById('inbox-view');
                 if (inboxView && inboxView.style.display !== 'none') {
                     loadInbox();
                 } else {
-                    loadInboxData(); // Just update badge count
+                    loadInboxData();
                 }
                 if (currentAgentId) {
                     loadMessages(currentAgentId);
@@ -1014,50 +1076,36 @@
         }
         
         function stopAutoRefresh() {
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-                refreshInterval = null;
-            }
-            if (messagesInterval) {
-                clearInterval(messagesInterval);
-                messagesInterval = null;
-            }
+            if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+            if (messagesInterval) { clearInterval(messagesInterval); messagesInterval = null; }
         }
         
-        // Simple hash function for change detection
         function simpleHash(str) {
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
                 const char = str.charCodeAt(i);
                 hash = ((hash << 5) - hash) + char;
-                hash = hash & hash; // Convert to 32bit integer
+                hash = hash & hash;
             }
             return hash;
         }
         
-        // Load inbox data (for badge updates)
         async function loadInboxData() {
             try {
                 const response = await fetch('/inbox');
                 const data = await response.json();
-                
                 if (data.status === 'success') {
                     inboxItems = data.items;
                     updateUnreadCount();
                 }
-            } catch (error) {
-                console.error('Error loading inbox data:', error);
-            }
+            } catch (error) { console.error('Error loading inbox data:', error); }
         }
         
-        // Load and render inbox
         async function loadInbox(forceRender = false) {
             try {
                 const response = await fetch('/inbox');
                 const data = await response.json();
-                
                 if (data.status === 'success') {
-                    // Check if inbox has changed before re-rendering
                     const newHash = simpleHash(JSON.stringify(data.items));
                     if (forceRender || newHash !== lastInboxHash) {
                         inboxItems = data.items;
@@ -1065,49 +1113,35 @@
                         renderInbox(inboxItems);
                     }
                     updateUnreadCount();
-                } else {
-                    showError('Failed to load inbox');
-                }
-            } catch (error) {
-                showError('Error loading inbox: ' + error.message);
-            }
+                } else { showError('Failed to load inbox'); }
+            } catch (error) { showError('Error loading inbox: ' + error.message); }
         }
         
-        // Render inbox items in main content
         function renderInbox(items) {
             const inboxContent = document.getElementById('inbox-content');
-            
             if (items.length === 0) {
                 inboxContent.innerHTML = `
                     <div class="inbox-empty">
                         <div class="inbox-empty-icon">📭</div>
-                        <div>No agent responses yet</div>
-                        <div style="font-size: 12px; margin-top: 5px;">Create an agent to get started</div>
-                    </div>
-                `;
+                        <div style="font-size: 16px; font-weight: 500;">No agent responses yet</div>
+                        <div style="font-size: 12px; margin-top: 8px; color: var(--text-muted);">Create an agent to get started</div>
+                    </div>`;
                 return;
             }
-            
-            // Filter to only show items with responses
             const itemsWithResponses = items.filter(item => item.last_response_preview);
-            
             if (itemsWithResponses.length === 0) {
                 inboxContent.innerHTML = `
                     <div class="inbox-empty">
                         <div class="inbox-empty-icon">📭</div>
-                        <div>No agent responses yet</div>
-                        <div style="font-size: 12px; margin-top: 5px;">Send a message to an agent to see responses here</div>
-                    </div>
-                `;
+                        <div style="font-size: 16px; font-weight: 500;">No agent responses yet</div>
+                        <div style="font-size: 12px; margin-top: 8px; color: var(--text-muted);">Send a message to an agent to see responses here</div>
+                    </div>`;
                 return;
             }
-            
             inboxContent.innerHTML = itemsWithResponses.map(item => {
                 const timeText = formatLastActivity(item.last_activity);
                 const isUnread = item.has_unread;
-                const statusBadge = item.processing ? 
-                    '<span class="status-badge status-processing">Processing</span>' : '';
-                
+                const statusBadge = item.processing ? '<span class="status-badge status-processing">Processing</span>' : '';
                 return `
                     <div class="inbox-item ${isUnread ? 'unread' : ''}" onclick="selectAgent('${item.agent_id}')">
                         <div class="inbox-item-header">
@@ -1119,277 +1153,189 @@
                             <div class="inbox-item-time">${timeText}</div>
                         </div>
                         <div class="inbox-item-preview">${escapeHtml(item.last_response_preview || 'No response yet')}</div>
-                    </div>
-                `;
+                    </div>`;
             }).join('');
         }
         
-        // Update unread count badge
         function updateUnreadCount() {
             const unreadCount = inboxItems.filter(item => item.has_unread && item.last_response_preview).length;
             const badge = document.getElementById('unread-count');
             if (unreadCount > 0) {
                 badge.textContent = unreadCount;
                 badge.style.display = 'inline-block';
-            } else {
-                badge.style.display = 'none';
-            }
+            } else { badge.style.display = 'none'; }
         }
         
-        // Load agents from API
         async function loadAgents() {
             try {
                 const response = await fetch('/agents');
                 const data = await response.json();
-                
                 if (data.status === 'success') {
-                    // Check if agents have changed before re-rendering
                     const newHash = simpleHash(JSON.stringify(data.agents));
                     if (newHash !== lastAgentsHash) {
                         allAgents = data.agents;
                         lastAgentsHash = newHash;
                         renderAgents(getFilteredAndSortedAgents());
                     }
-                } else {
-                    showError('Failed to load agents');
-                }
-            } catch (error) {
-                showError('Error loading agents: ' + error.message);
-            }
+                } else { showError('Failed to load agents'); }
+            } catch (error) { showError('Error loading agents: ' + error.message); }
         }
         
-        // Get filtered and sorted agents based on current settings
         function getFilteredAndSortedAgents() {
             const showAll = document.getElementById('show-all-agents').checked;
             let agents = [...allAgents];
-            
-            // Filter out old agents (older than 7 days) if not showing all
             if (!showAll) {
                 const sevenDaysAgo = new Date();
                 sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-                
                 agents = agents.filter(agent => {
                     if (!agent.last_activity) {
-                        // If no last_activity, include only if created recently
                         if (!agent.created_at) return true;
-                        const createdAt = new Date(agent.created_at);
-                        return createdAt > sevenDaysAgo;
+                        return new Date(agent.created_at) > sevenDaysAgo;
                     }
-                    
-                    const lastActivity = new Date(agent.last_activity);
-                    return lastActivity > sevenDaysAgo;
+                    return new Date(agent.last_activity) > sevenDaysAgo;
                 });
             }
-            
-            // Sort by last_activity (newest first)
             agents.sort((a, b) => {
-                const aTime = a.last_activity ? new Date(a.last_activity) : 
-                             a.created_at ? new Date(a.created_at) : new Date(0);
-                const bTime = b.last_activity ? new Date(b.last_activity) : 
-                             b.created_at ? new Date(b.created_at) : new Date(0);
-                return bTime - aTime; // Descending order (newest first)
+                const aTime = a.last_activity ? new Date(a.last_activity) : a.created_at ? new Date(a.created_at) : new Date(0);
+                const bTime = b.last_activity ? new Date(b.last_activity) : b.created_at ? new Date(b.created_at) : new Date(0);
+                return bTime - aTime;
             });
-            
             return agents;
         }
         
-        // Toggle show all agents
-        function toggleShowAllAgents() {
-            renderAgents(getFilteredAndSortedAgents());
-        }
+        function toggleShowAllAgents() { renderAgents(getFilteredAndSortedAgents()); }
         
-        // Render agents in sidebar
         function renderAgents(agents) {
             const agentsList = document.getElementById('agents-list');
-            
             if (agents.length === 0) {
                 const showAll = document.getElementById('show-all-agents').checked;
-                const message = showAll ? 'No agents found' : 'No recent agents found (toggle "Show all agents" to see older ones)';
+                const message = showAll ? 'No agents found' : 'No recent agents';
                 agentsList.innerHTML = `<div class="loading">${message}</div>`;
                 return;
             }
-            
             agentsList.innerHTML = agents.map(agent => {
                 const lastActivityText = formatLastActivity(agent.last_activity || agent.created_at);
                 const dataDir = agent.data_dir || 'N/A';
                 const port = agent.port || 'N/A';
                 const description = agent.description || '';
-                
                 return `
                     <div class="agent-item ${agent.agent_id === currentAgentId ? 'active' : ''}" 
                          onclick="selectAgent('${agent.agent_id}')">
-                        <div class="agent-info">
-                            <div class="agent-id">${agent.agent_id}</div>
-                            ${description ? `<div class="agent-description">${escapeHtml(description)}</div>` : ''}
-                            <div class="agent-status">
-                                <span class="status-badge status-${agent.status}">${agent.status}</span>
-                                ${agent.processing ? '<span class="status-badge status-processing">Processing</span>' : ''}
+                        <div class="agent-id">${agent.agent_id}</div>
+                        ${description ? `<div class="agent-description">${escapeHtml(description)}</div>` : ''}
+                        <div class="agent-status">
+                            <span class="status-badge status-${agent.status}">${agent.status}</span>
+                            ${agent.processing ? '<span class="status-badge status-processing">Processing</span>' : ''}
+                            <span style="color: var(--text-muted); font-size: 10px; font-family: var(--font-mono);">${lastActivityText}</span>
+                        </div>
+                        <div class="agent-meta">
+                            <div class="agent-meta-row"><span>Port: ${port}</span></div>
+                            <div class="agent-meta-row">
+                                <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(dataDir)}">
+                                    ${escapeHtml(dataDir)}
+                                </span>
                             </div>
-                            <div class="agent-status" style="margin-top: 4px; font-size: 11px;">
-                                Last active: ${lastActivityText}
-                            </div>
-                            <div class="agent-meta">
-                                <div class="agent-meta-row">
-                                    <span>Port: ${port}</span>
-                                </div>
-                                <div class="agent-meta-row">
-                                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(dataDir)}">
-                                        Path: ${escapeHtml(dataDir)}
-                                    </span>
-                                </div>
-                                <div class="agent-meta-row">
-                                    <button class="copy-btn" onclick="copyKiroCommand(event, '${escapeHtml(dataDir)}')" title="Copy 'kiro ${escapeHtml(dataDir)}' to clipboard">
-                                        📋 Copy workspace path
-                                    </button>
-                                </div>
+                            <div class="agent-meta-row">
+                                <button class="copy-btn" onclick="copyPath(event, '${escapeHtml(dataDir)}')" title="Copy path">
+                                    📋 Copy path
+                                </button>
                             </div>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             }).join('');
         }
         
-        // Format last activity time for display
         function formatLastActivity(dateString) {
             if (!dateString) return 'Unknown';
-            
             const date = new Date(dateString);
             const now = new Date();
             const diffMs = now - date;
             const diffMins = Math.floor(diffMs / (1000 * 60));
             const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
             const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            
-            if (diffMins < 1) {
-                return 'Just now';
-            } else if (diffMins < 60) {
-                return `${diffMins}m ago`;
-            } else if (diffHours < 24) {
-                return `${diffHours}h ago`;
-            } else if (diffDays < 7) {
-                return `${diffDays}d ago`;
-            } else {
-                return date.toLocaleDateString();
-            }
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            return date.toLocaleDateString();
         }
         
-        // Select an agent
         async function selectAgent(agentId) {
             currentAgentId = agentId;
-            lastMessagesHash = null; // Reset hash when switching agents
-            
-            // Remove new agent form if open
+            lastMessagesHash = null;
             const newAgentForm = document.getElementById('new-agent-form');
             if (newAgentForm) newAgentForm.remove();
             
-            // Update UI - hide inbox, show chat
             document.getElementById('inbox-view').style.display = 'none';
             document.getElementById('no-agent').style.display = 'none';
             document.getElementById('chat-container').style.display = 'flex';
-            document.getElementById('chat-title').textContent = `Chat with ${agentId}`;
-            
-            // Update inbox button state
+            document.getElementById('chat-title').textContent = agentId;
             document.getElementById('inbox-btn').classList.remove('active');
-            
-            // Update active agent in sidebar (re-render with current filter)
             renderAgents(getFilteredAndSortedAgents());
-            
-            // Load messages (force render since we switched agents)
             await loadMessages(agentId, true);
         }
         
-        // Load messages for current agent
         async function loadMessages(agentId, forceRender = false) {
             try {
                 const response = await fetch(`/agents/${agentId}/messages?count=20`);
                 const data = await response.json();
-                
-                // Check if user switched agents while request was in flight
-                if (agentId !== currentAgentId) {
-                    return; // Discard stale response
-                }
-                
+                if (agentId !== currentAgentId) return;
                 if (data.status === 'success') {
-                    // Check if messages have changed before re-rendering
                     const newHash = simpleHash(JSON.stringify(data.messages));
                     if (forceRender || newHash !== lastMessagesHash) {
                         lastMessagesHash = newHash;
                         renderMessages(data.messages);
                     }
                 } else if (response.status === 404) {
-                    // Agent doesn't exist yet, show empty chat
                     if (forceRender || lastMessagesHash !== 'empty') {
                         lastMessagesHash = 'empty';
                         renderMessages([]);
                     }
-                } else {
-                    showError('Failed to load messages');
-                }
-            } catch (error) {
-                showError('Error loading messages: ' + error.message);
-            }
+                } else { showError('Failed to load messages'); }
+            } catch (error) { showError('Error loading messages: ' + error.message); }
         }
         
-        // Render messages - handles raw Strands message format
         function renderMessages(messages) {
             const messagesArea = document.getElementById('messages-area');
-            
-            // Check if user is near bottom before re-rendering (within 100px)
             const wasNearBottom = messagesArea.scrollHeight - messagesArea.scrollTop - messagesArea.clientHeight < 100;
-            
             if (messages.length === 0) {
                 messagesArea.innerHTML = '<div class="loading">No messages yet. Send a message to start the conversation.</div>';
                 return;
             }
-            
-            // Process raw Strands messages into display format
             const displayMessages = [];
             for (const msg of messages) {
                 const content = msg.content || [];
-                
                 if (msg.role === 'user') {
-                    // Check for tool_result in content
                     const toolResult = Array.isArray(content) && content.find(c => c.type === 'tool_result' || c.toolResult);
                     if (toolResult) {
                         const result = toolResult.toolResult || toolResult;
                         const status = result.status || (result.is_error ? 'error' : 'success');
                         displayMessages.push({ type: 'tool_result', status });
                     } else {
-                        // Regular user message
                         const text = extractText(content);
                         if (text) displayMessages.push({ type: 'user', content: text });
                     }
                 } else if (msg.role === 'assistant') {
-                    // Extract text and tool_use from content
                     if (Array.isArray(content)) {
                         let text = '';
                         for (const item of content) {
                             if (item.type === 'text' || item.text) {
                                 text += (item.text || '') + '\n';
                             } else if (item.type === 'tool_use' || item.toolUse) {
-                                // Add any accumulated text first
                                 if (text.trim()) {
                                     displayMessages.push({ type: 'assistant', content: text.trim() });
                                     text = '';
                                 }
                                 const toolData = item.toolUse || item;
-                                displayMessages.push({ 
-                                    type: 'tool_use', 
-                                    tool: toolData.name || 'unknown',
-                                    input: toolData.input || null
-                                });
+                                displayMessages.push({ type: 'tool_use', tool: toolData.name || 'unknown', input: toolData.input || null });
                             }
                         }
-                        // Add remaining text
-                        if (text.trim()) {
-                            displayMessages.push({ type: 'assistant', content: text.trim() });
-                        }
+                        if (text.trim()) displayMessages.push({ type: 'assistant', content: text.trim() });
                     } else if (typeof content === 'string') {
                         displayMessages.push({ type: 'assistant', content });
                     }
                 }
             }
-            
             messagesArea.innerHTML = displayMessages.map(msg => {
                 if (msg.type === 'tool_use') {
                     const inputStr = msg.input ? formatToolInput(msg.input) : '';
@@ -1400,11 +1346,9 @@
                                 <span class="tool-badge tool-name">${escapeHtml(msg.tool)}</span>
                                 ${inputStr ? `<span class="tool-params">${escapeHtml(inputStr)}</span>` : ''}
                             </div>
-                        </div>
-                    `;
+                        </div>`;
                 } else if (msg.type === 'tool_result') {
-                    const statusClass = msg.status === 'success' ? 'status-success' : 
-                                       msg.status === 'error' ? 'status-error' : 'status-unknown';
+                    const statusClass = msg.status === 'success' ? 'status-success' : msg.status === 'error' ? 'status-error' : 'status-unknown';
                     const icon = msg.status === 'success' ? '✓' : msg.status === 'error' ? '✗' : '?';
                     return `
                         <div class="message tool_result">
@@ -1412,104 +1356,62 @@
                                 <span class="tool-icon" style="margin-left: 22px;">↳</span>
                                 <span class="tool-badge ${statusClass}">${icon}</span>
                             </div>
-                        </div>
-                    `;
+                        </div>`;
                 } else {
                     return `
                         <div class="message ${msg.type}">
                             <div class="message-header">${msg.type.toUpperCase()}</div>
                             <div class="message-content">${escapeHtml(msg.content || '')}</div>
-                        </div>
-                    `;
+                        </div>`;
                 }
             }).join('');
-            
-            // Only auto-scroll if user was already near the bottom
-            if (wasNearBottom) {
-                messagesArea.scrollTop = messagesArea.scrollHeight;
-            }
+            if (wasNearBottom) messagesArea.scrollTop = messagesArea.scrollHeight;
         }
         
-        // Format tool input for display
         function formatToolInput(input) {
             if (!input) return '';
             if (typeof input === 'string') return input;
-            
-            // For objects, show key=value pairs, truncating long values
             const parts = [];
             for (const [key, value] of Object.entries(input)) {
                 let valStr = typeof value === 'string' ? value : JSON.stringify(value);
-                // Truncate long values
-                if (valStr.length > 50) {
-                    valStr = valStr.substring(0, 47) + '...';
-                }
+                if (valStr.length > 50) valStr = valStr.substring(0, 47) + '...';
                 parts.push(`${key}=${valStr}`);
             }
             return parts.join(', ');
         }
         
-        // Extract text from Strands content array
         function extractText(content) {
             if (typeof content === 'string') return content;
             if (!Array.isArray(content)) return '';
-            return content
-                .filter(c => c.type === 'text' || c.text)
-                .map(c => c.text || '')
-                .join('\n');
+            return content.filter(c => c.type === 'text' || c.text).map(c => c.text || '').join('\n');
         }
         
-        // Send message
         async function sendMessage() {
             if (!currentAgentId) return;
-            
             const messageInput = document.getElementById('message-input');
             const sendBtn = document.getElementById('send-btn');
             const message = messageInput.value.trim();
-            
             if (!message) return;
-            
-            // Get optional parameters
             const awsProfile = document.getElementById('aws-profile').value.trim() || null;
             const awsRegion = document.getElementById('aws-region').value.trim() || null;
             const systemPrompt = document.getElementById('system-prompt').value.trim() || null;
-            
-            // Disable input
             messageInput.disabled = true;
             sendBtn.disabled = true;
             sendBtn.textContent = 'Sending...';
-            
             try {
                 const response = await fetch(`/agents/${currentAgentId}/message`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        message: message,
-                        aws_profile: awsProfile,
-                        aws_region: awsRegion,
-                        system_prompt: systemPrompt
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, aws_profile: awsProfile, aws_region: awsRegion, system_prompt: systemPrompt })
                 });
-                
                 const data = await response.json();
-                
                 if (data.status === 'dispatched' || data.status === 'queued') {
-                    // Clear input
                     messageInput.value = '';
-                    
-                    // Immediately add user message to UI
                     addMessageToUI('user', message);
-                    
-                    // Start polling for response
                     pollForResponse();
-                } else {
-                    showError(data.error || 'Failed to send message');
-                }
-            } catch (error) {
-                showError('Error sending message: ' + error.message);
-            } finally {
-                // Re-enable input
+                } else { showError(data.error || 'Failed to send message'); }
+            } catch (error) { showError('Error sending message: ' + error.message); }
+            finally {
                 messageInput.disabled = false;
                 sendBtn.disabled = false;
                 sendBtn.textContent = 'Send';
@@ -1517,76 +1419,47 @@
             }
         }
         
-        // Add message to UI immediately
         function addMessageToUI(role, content) {
             const messagesArea = document.getElementById('messages-area');
-            
-            // If no messages, clear loading text
-            if (messagesArea.innerHTML.includes('No messages yet')) {
-                messagesArea.innerHTML = '';
-            }
-            
+            if (messagesArea.innerHTML.includes('No messages yet')) messagesArea.innerHTML = '';
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
             messageDiv.innerHTML = `
                 <div class="message-header">${role.toUpperCase()}</div>
-                <div class="message-content">${escapeHtml(content)}</div>
-            `;
-            
+                <div class="message-content">${escapeHtml(content)}</div>`;
             messagesArea.appendChild(messageDiv);
             messagesArea.scrollTop = messagesArea.scrollHeight;
         }
         
-        // Poll for response after sending message
         function pollForResponse() {
             let attempts = 0;
-            const maxAttempts = 40; // 2 minutes at 3 second intervals
-            
+            const maxAttempts = 40;
             const poll = async () => {
                 attempts++;
-                
                 try {
                     const response = await fetch(`/agents/${currentAgentId}/messages?count=1`);
                     const data = await response.json();
-                    
                     if (data.status === 'success' && data.messages.length > 0) {
                         const lastMessage = data.messages[data.messages.length - 1];
-                        
-                        // Check if this is a new assistant message
                         const messagesArea = document.getElementById('messages-area');
                         const lastDisplayed = messagesArea.querySelector('.message:last-child .message-header');
-                        
-                        if (lastMessage.role === 'assistant' && 
-                            (!lastDisplayed || !lastDisplayed.textContent.includes('ASSISTANT'))) {
-                            // Load all messages to get complete conversation (force render)
-                            lastMessagesHash = null; // Reset hash to force re-render
+                        if (lastMessage.role === 'assistant' && (!lastDisplayed || !lastDisplayed.textContent.includes('ASSISTANT'))) {
+                            lastMessagesHash = null;
                             loadMessages(currentAgentId, true);
-                            return; // Stop polling
+                            return;
                         }
                     }
-                    
-                    // Continue polling if not processing and within attempt limit
-                    if (!data.processing && attempts < maxAttempts) {
-                        setTimeout(poll, 3000);
-                    } else if (attempts >= maxAttempts) {
-                        showError('Response timeout. The agent may be taking longer than expected.');
-                    } else {
-                        // Still processing, continue polling
-                        setTimeout(poll, 3000);
-                    }
+                    if (!data.processing && attempts < maxAttempts) { setTimeout(poll, 3000); }
+                    else if (attempts >= maxAttempts) { showError('Response timeout.'); }
+                    else { setTimeout(poll, 3000); }
                 } catch (error) {
-                    console.error('Error polling for response:', error);
-                    if (attempts < maxAttempts) {
-                        setTimeout(poll, 3000);
-                    }
+                    console.error('Error polling:', error);
+                    if (attempts < maxAttempts) setTimeout(poll, 3000);
                 }
             };
-            
-            // Start polling after a short delay
             setTimeout(poll, 1000);
         }
         
-        // Handle Enter key in message input
         function handleKeyDown(event) {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
@@ -1594,112 +1467,77 @@
             }
         }
         
-        // Show error message
         function showError(message) {
             const error = document.createElement('div');
             error.className = 'error';
             error.textContent = message;
             document.body.appendChild(error);
-            
-            setTimeout(() => {
-                error.remove();
-            }, 5000);
+            setTimeout(() => error.remove(), 5000);
         }
         
-        // Show new agent form
         function showNewAgentForm() {
-            // Hide inbox, chat, show form
             document.getElementById('inbox-view').style.display = 'none';
             document.getElementById('no-agent').style.display = 'none';
             document.getElementById('chat-container').style.display = 'none';
-            
-            // Update inbox button state
             document.getElementById('inbox-btn').classList.remove('active');
-            
-            // Remove existing form if any
             const existingForm = document.getElementById('new-agent-form');
             if (existingForm) existingForm.remove();
-            
-            // Create form HTML
             const formHtml = `
                 <div id="new-agent-form" class="new-agent-form">
                     <div class="form-header">
                         <h2>Create New Agent</h2>
-                        <p>Configure and start a new AI agent in an isolated Docker container.</p>
+                        <p>Configure and launch a new AI agent in an isolated Docker container with its own workspace, tools, and MCP servers.</p>
                     </div>
-                    
                     <div class="form-group">
                         <label class="form-label">Agent ID *</label>
                         <input type="text" id="new-agent-id" class="form-input" 
                                placeholder="e.g., code-reviewer, data-analyst, my-helper"
                                pattern="[a-z0-9-]+" />
-                        <div class="form-help">Lowercase letters, numbers, and hyphens only. This will be the agent's unique identifier.</div>
+                        <div class="form-help">Lowercase letters, numbers, and hyphens only.</div>
                     </div>
-                    
                     <div class="form-group">
-                        <label class="form-label">Description (optional)</label>
+                        <label class="form-label">Description</label>
                         <input type="text" id="new-agent-description" class="form-input" 
                                placeholder="e.g., Reviews Python code for best practices" />
-                        <div class="form-help">Brief description to help identify this agent later.</div>
                     </div>
-                    
                     <div class="form-group">
-                        <label class="form-label">System Prompt (optional)</label>
+                        <label class="form-label">System Prompt</label>
                         <textarea id="new-agent-system-prompt" class="form-input form-textarea large"
                                   placeholder="You are a helpful assistant specialized in..."></textarea>
-                        <div class="form-help">Define the agent's personality, expertise, and behavior. Leave empty for default.</div>
+                        <div class="form-help">Define the agent's expertise and behavior. Leave empty for default.</div>
                     </div>
-                    
                     <div class="form-group">
                         <label class="form-label">Initial Message *</label>
                         <textarea id="new-agent-message" class="form-input form-textarea"
                                   placeholder="Hello! Please help me with..."></textarea>
-                        <div class="form-help">The first message to send to the agent to start the conversation.</div>
                     </div>
-                    
-                    <div style="display: flex; gap: 15px;">
+                    <div style="display: flex; gap: 16px;">
                         <div class="form-group" style="flex: 1;">
-                            <label class="form-label">AWS Profile (optional)</label>
-                            <input type="text" id="new-agent-aws-profile" class="form-input" 
-                                   placeholder="default" />
-                            <div class="form-help">AWS credentials profile for Bedrock access.</div>
+                            <label class="form-label">AWS Profile</label>
+                            <input type="text" id="new-agent-aws-profile" class="form-input" placeholder="default" />
                         </div>
-                        
                         <div class="form-group" style="flex: 1;">
-                            <label class="form-label">AWS Region (optional)</label>
-                            <input type="text" id="new-agent-aws-region" class="form-input" 
-                                   placeholder="us-east-1" />
-                            <div class="form-help">AWS region for Bedrock API calls.</div>
+                            <label class="form-label">AWS Region</label>
+                            <input type="text" id="new-agent-aws-region" class="form-input" placeholder="us-east-1" />
                         </div>
                     </div>
-                    
                     <div class="form-buttons">
                         <button class="btn-secondary" onclick="cancelNewAgent()">Cancel</button>
                         <button class="btn-primary" id="create-agent-btn" onclick="createNewAgent()">Create Agent</button>
                     </div>
-                </div>
-            `;
-            
+                </div>`;
             document.querySelector('.main-content').insertAdjacentHTML('beforeend', formHtml);
-            
-            // Focus the agent ID input
             setTimeout(() => document.getElementById('new-agent-id').focus(), 100);
-            
-            // Clear current agent selection
             currentAgentId = null;
             renderAgents(getFilteredAndSortedAgents());
         }
         
-        // Cancel new agent form
         function cancelNewAgent() {
             const form = document.getElementById('new-agent-form');
             if (form) form.remove();
-            
-            // Show inbox view
             showInbox();
         }
         
-        // Create new agent
         async function createNewAgent() {
             const agentId = document.getElementById('new-agent-id').value.trim();
             const description = document.getElementById('new-agent-description').value.trim() || null;
@@ -1707,66 +1545,26 @@
             const message = document.getElementById('new-agent-message').value.trim();
             const awsProfile = document.getElementById('new-agent-aws-profile').value.trim() || null;
             const awsRegion = document.getElementById('new-agent-aws-region').value.trim() || null;
-            
-            // Validation
-            if (!agentId) {
-                showError('Agent ID is required');
-                document.getElementById('new-agent-id').focus();
-                return;
-            }
-            
-            if (!/^[a-z0-9-]+$/.test(agentId)) {
-                showError('Agent ID can only contain lowercase letters, numbers, and hyphens');
-                document.getElementById('new-agent-id').focus();
-                return;
-            }
-            
-            if (!message) {
-                showError('Initial message is required');
-                document.getElementById('new-agent-message').focus();
-                return;
-            }
-            
-            // Check if agent already exists
-            if (allAgents.some(a => a.agent_id === agentId)) {
-                showError(`Agent "${agentId}" already exists. Choose a different ID or select it from the list.`);
-                document.getElementById('new-agent-id').focus();
-                return;
-            }
-            
-            // Disable button
+            if (!agentId) { showError('Agent ID is required'); return; }
+            if (!/^[a-z0-9-]+$/.test(agentId)) { showError('Agent ID: lowercase letters, numbers, hyphens only'); return; }
+            if (!message) { showError('Initial message is required'); return; }
+            if (allAgents.some(a => a.agent_id === agentId)) { showError(`Agent "${agentId}" already exists`); return; }
             const btn = document.getElementById('create-agent-btn');
             btn.disabled = true;
             btn.textContent = 'Creating...';
-            
             try {
                 const response = await fetch(`/agents/${agentId}/message`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: message,
-                        aws_profile: awsProfile,
-                        aws_region: awsRegion,
-                        system_prompt: systemPrompt,
-                        description: description
-                    })
+                    body: JSON.stringify({ message, aws_profile: awsProfile, aws_region: awsRegion, system_prompt: systemPrompt, description })
                 });
-                
                 const data = await response.json();
-                
                 if (data.status === 'dispatched' || data.status === 'queued') {
-                    // Remove form
                     const form = document.getElementById('new-agent-form');
                     if (form) form.remove();
-                    
-                    // Refresh agents list and select the new agent
                     await loadAgents();
                     await selectAgent(agentId);
-                    
-                    // Add the user message to UI immediately
                     addMessageToUI('user', message);
-                    
-                    // Start polling for response
                     pollForResponse();
                 } else {
                     showError(data.error || 'Failed to create agent');
@@ -1780,62 +1578,22 @@
             }
         }
         
-        // Escape HTML
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
         
-        // Copy workspace path to clipboard
-        function copyKiroCommand(event, dataDir) {
-            // Prevent event bubbling to selectAgent
+        function copyPath(event, dataDir) {
             event.stopPropagation();
-            
-            // Copy to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(dataDir)
-                    .then(() => {
-                        // Visual feedback
-                        const btn = event.target.closest('.copy-btn');
-                        const originalText = btn.innerHTML;
-                        btn.classList.add('copied');
-                        btn.innerHTML = '✓ Copied!';
-                        
-                        setTimeout(() => {
-                            btn.classList.remove('copied');
-                            btn.innerHTML = originalText;
-                        }, 2000);
-                    })
-                    .catch(err => {
-                        console.error('Failed to copy:', err);
-                        showError('Failed to copy command to clipboard');
-                    });
-            } else {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = command;
-                textArea.style.position = 'fixed';
-                textArea.style.left = '-999999px';
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
+                navigator.clipboard.writeText(dataDir).then(() => {
                     const btn = event.target.closest('.copy-btn');
                     const originalText = btn.innerHTML;
                     btn.classList.add('copied');
                     btn.innerHTML = '✓ Copied!';
-                    
-                    setTimeout(() => {
-                        btn.classList.remove('copied');
-                        btn.innerHTML = originalText;
-                    }, 2000);
-                } catch (err) {
-                    console.error('Failed to copy:', err);
-                    showError('Failed to copy command to clipboard');
-                } finally {
-                    document.body.removeChild(textArea);
-                }
+                    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = originalText; }, 2000);
+                }).catch(err => showError('Failed to copy'));
             }
         }
         
@@ -1847,10 +1605,7 @@
             startAutoRefresh();
         });
         
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', () => {
-            stopAutoRefresh();
-        });
+        window.addEventListener('beforeunload', () => stopAutoRefresh());
     </script>
 </body>
 </html>
