@@ -164,6 +164,58 @@
             gap: 8px;
         }
 
+
+        /* Auto-play */
+        .autoplay-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            padding: 4px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .autoplay-toggle:hover {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--text);
+            border-color: var(--accent);
+        }
+
+        .autoplay-toggle.active {
+            background: rgba(45, 212, 191, 0.15);
+            border-color: var(--teal);
+            color: var(--teal);
+        }
+
+        .autoplay-toggle .ap-icon {
+            width: 14px;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .autoplay-toggle .ap-countdown {
+            min-width: 18px;
+            text-align: center;
+        }
+
+        @keyframes ap-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .autoplay-toggle.active .ap-icon {
+            animation: ap-pulse 2s ease-in-out infinite;
+        }
+
         /* ═══════════════════════════════════════════════════════════════
            TYPOGRAPHY
            ═══════════════════════════════════════════════════════════════ */
@@ -1413,7 +1465,7 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
                 MCP Dev Summit North America 2026
             </p>
             <p style="font-size: 14px; color: var(--accent-glow);">
-                ← → arrow keys to navigate · Built with Strands Agents
+                ← → arrow keys to navigate · A = auto-play · ?autoplay=12 for kiosk mode
             </p>
         </div>
     </section>
@@ -1439,7 +1491,13 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
         <button class="nav-btn" id="btn-next" onclick="goTo(current + 1)">Next →</button>
     </div>
 
-    <div class="counter" id="counter"></div>
+    <div style="display:flex;align-items:center;gap:12px;">
+        <button class="autoplay-toggle" id="autoplay-btn" onclick="toggleAutoplay()" title="Auto-play (A key)">
+            <span class="ap-icon" id="ap-icon">▶</span>
+            <span class="ap-countdown" id="ap-countdown">Auto</span>
+        </button>
+        <div class="counter" id="counter"></div>
+    </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════
@@ -1552,6 +1610,129 @@ $ containerized-strands-agents <span class="fn">pull</span> --repo owner/repo --
     // Init
     progress.style.width = '0%';
     counter.textContent = '1 / ' + total;
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // AUTO-PLAY (booth / kiosk mode)
+    // ═══════════════════════════════════════════════════════════════
+    let autoplayActive = false;
+    let autoplayTimer = null;
+    let countdownTimer = null;
+    let countdownValue = 0;
+
+    // Default interval in seconds — override with ?autoplay=N in URL
+    const DEFAULT_INTERVAL = 12;
+
+    const apBtn = document.getElementById('autoplay-btn');
+    const apIcon = document.getElementById('ap-icon');
+    const apCountdown = document.getElementById('ap-countdown');
+
+    function getAutoplayInterval() {
+        const params = new URLSearchParams(window.location.search);
+        const val = params.get('autoplay');
+        if (val && !isNaN(parseInt(val)) && parseInt(val) > 0) {
+            return parseInt(val);
+        }
+        return DEFAULT_INTERVAL;
+    }
+
+    function startAutoplay() {
+        autoplayActive = true;
+        apBtn.classList.add('active');
+        apIcon.textContent = '⏸';
+        scheduleNext();
+    }
+
+    function stopAutoplay() {
+        autoplayActive = false;
+        apBtn.classList.remove('active');
+        apIcon.textContent = '▶';
+        apCountdown.textContent = 'Auto';
+        clearTimeout(autoplayTimer);
+        clearInterval(countdownTimer);
+        autoplayTimer = null;
+        countdownTimer = null;
+    }
+
+    function toggleAutoplay() {
+        if (autoplayActive) {
+            stopAutoplay();
+        } else {
+            startAutoplay();
+        }
+    }
+
+    let apScheduling = false;  // Prevent double-schedule
+
+    function scheduleNext() {
+        if (!autoplayActive) return;
+
+        const interval = getAutoplayInterval();
+        countdownValue = interval;
+        apCountdown.textContent = countdownValue + 's';
+
+        // Countdown display
+        clearInterval(countdownTimer);
+        countdownTimer = setInterval(function() {
+            countdownValue--;
+            if (countdownValue > 0) {
+                apCountdown.textContent = countdownValue + 's';
+            } else {
+                clearInterval(countdownTimer);
+            }
+        }, 1000);
+
+        // Schedule slide advance
+        clearTimeout(autoplayTimer);
+        autoplayTimer = setTimeout(function() {
+            if (!autoplayActive) return;
+
+            apScheduling = true;  // Flag: scheduleNext will be called here, not in goTo override
+
+            // Loop back to start if at the end
+            if (current >= total - 1) {
+                goTo(0);
+            } else {
+                goTo(current + 1);
+            }
+
+            apScheduling = false;
+
+            // Schedule the next advance after transition
+            setTimeout(function() { scheduleNext(); }, 600);
+        }, interval * 1000);
+    }
+
+    // Override goTo to reset autoplay timer on MANUAL slide changes
+    const _origGoTo = goTo;
+    goTo = function(n) {
+        const before = current;
+        _origGoTo(n);
+        // Only reschedule on manual navigation (not auto-advance)
+        if (autoplayActive && current !== before && !apScheduling) {
+            clearTimeout(autoplayTimer);
+            clearInterval(countdownTimer);
+            setTimeout(function() { scheduleNext(); }, 600);
+        }
+    };
+
+    // Keyboard: 'A' key toggles autoplay
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'a' || e.key === 'A') {
+            e.preventDefault();
+            toggleAutoplay();
+        }
+    });
+
+    // Auto-start if ?autoplay is in the URL
+    (function() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('autoplay')) {
+            // Small delay to let the page fully render
+            setTimeout(startAutoplay, 1000);
+        }
+    })();
+
 </script>
 
 </body>
